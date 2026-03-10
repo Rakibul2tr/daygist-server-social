@@ -1,0 +1,22 @@
+// FILE: src/middleware/authMiddleware.js
+import User from "../models/user/user.model.js";
+import { verifyToken } from "../utils/jwt.js";
+
+export const authGuard = async (req, res, next) => {
+  try {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+    const decoded = verifyToken(token);
+    const user = await User.findById(decoded.userId);
+
+    if (!user) return res.status(401).json({ message: "Unauthorized" });
+
+    req.user = user;
+    next();
+  } catch (e) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+};
