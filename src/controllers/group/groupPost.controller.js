@@ -326,7 +326,6 @@ export const updateGroupPost = async (req, res) => {
     const me = req.user?._id;
     const { groupId, postId } = req.params;
     if (!me) return res.status(401).json({ message: "Unauthorized" });
-    
 
     // must be member
     const okMem = await mustBeActiveMember({ me, groupId });

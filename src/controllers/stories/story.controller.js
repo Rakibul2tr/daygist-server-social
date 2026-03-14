@@ -112,7 +112,6 @@ export const createStory = async (req, res) => {
     }
 
     const created = await Story.create(doc);
-    
 
     return res.json({ success: true, story: created });
   } catch (e) {

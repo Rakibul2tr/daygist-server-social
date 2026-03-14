@@ -78,7 +78,7 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["USER", "ADMIN","SELLER",'MODERATOR','SUPPER ADMIN'],
+      enum: ["USER", "ADMIN", "SELLER", "MODERATOR", "SUPPER ADMIN"],
       default: "USER",
     },
 
@@ -92,11 +92,20 @@ const userSchema = new mongoose.Schema(
       enum: ["none", "pending", "approved", "rejected"],
       default: "none",
     },
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
+
+    lastSeen: {
+      type: Date,
+      default: null,
+    },
 
     followerCount: { type: Number, default: 0 },
     followingCount: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // ✅ nodemon restart/hot reload safe

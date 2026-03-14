@@ -8,7 +8,8 @@ import {
   getMyGroupsPost,
 } from "../../controllers/group/groupPost.controller.js";
 import { authGuard } from "../../middleware/authMiddleware.js";
-
+import { getPostLikes, likePost, unlikePost } from "../../controllers/group/groupPostLike.controller.js";
+import { getPostShares, sharePost } from "../../controllers/group/groupPostShare.controller.js";
 
 const router = express.Router();
 
@@ -25,5 +26,14 @@ router.patch("/:groupId/posts/:postId", authGuard, updateGroupPost);
 // post delete
 router.delete("/:groupId/posts/:postId", authGuard, deleteGroupPost);
 
+
+// like share
+
+router.post("/:postId/like", authGuard, likePost);
+router.delete("/:postId/like", authGuard, unlikePost);
+router.get("/:postId/likes", authGuard, getPostLikes);
+
+router.post("/:postId/share", authGuard, sharePost);
+router.get("/:postId/shares", authGuard, getPostShares);
 
 export default router;

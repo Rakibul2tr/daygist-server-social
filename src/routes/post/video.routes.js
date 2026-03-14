@@ -7,8 +7,6 @@ import { trackVideoInterest } from "../../controllers/post/videoInterest.control
 
 const router = Router();
 router.get("/feed/general", authGuard, getGeneralVideos);
-// router.get("/feed/general/:id", authGuard, getGeneralVideoById);
-
 router.get("/feed/reels", authGuard, getReelsVideos);
 
 // long video post create

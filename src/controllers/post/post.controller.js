@@ -1,10 +1,7 @@
 import Post from "../../models/post/post.model.js";
 import Save from "../../models/post/save.model.js";
 import { getHomeFeed } from "../../services/feed/feed.service.js";
-import {
-  deleteManyFromWasabi,
-  uploadToWasabiFilePath,
-} from "../../services/wbUpload.service.js";
+import { deleteManyFromWasabi, uploadToWasabiFilePath } from "../../services/wbUpload.service.js";
 
 const isOwner = (post, userId) => String(post.author) === String(userId);
 const toStr = (v) => (typeof v === "string" ? v.trim() : "");
@@ -103,7 +100,7 @@ export const createPost = async (req, res) => {
 
           // optional meta (for delete support)
           provider: ["cloudinary", "wasabi", "s3", "local"].includes(
-            m?.provider,
+            m?.provider
           )
             ? m.provider
             : undefined,
@@ -125,59 +122,10 @@ export const createPost = async (req, res) => {
       }
     }
 
-    // if (postType === "video") {
-    //   const vurl = toStr(video?.url);
-    //   if (vurl && isValidUrl(vurl)) {
-    //     const thumb = toStr(video?.thumbnailUrl);
-
-    //     safeMedias = [
-    //       {
-    //         url: vurl,
-    //         type: "video",
-
-    //         provider: ["cloudinary", "wasabi", "s3", "local"].includes(
-    //           video?.provider
-    //         )
-    //           ? video.provider
-    //           : undefined,
-    //         publicId: toStr(video?.publicId) || undefined,
-    //         key: toStr(video?.key) || undefined,
-
-    //         // ✅ IMPORTANT: thumbnail should be remote url, not file://
-    //         thumbnailUrl: isValidUrl(thumb) ? thumb : undefined,
-
-    //         duration: Number.isFinite(Number(video?.durationSec))
-    //           ? Number(video.durationSec)
-    //           : undefined,
-    //         width: Number.isFinite(Number(video?.width))
-    //           ? Number(video.width)
-    //           : undefined,
-    //         height: Number.isFinite(Number(video?.height))
-    //           ? Number(video.height)
-    //           : undefined,
-    //       },
-    //     ];
-    //   }
-
-    //   if (!safeMedias.length && !cleanText) {
-    //     return res
-    //       .status(400)
-    //       .json({ message: "Video post needs video url or caption." });
-    //   }
-    // }
-
     if (postType === "video") {
       const vurl = toStr(video?.url);
       if (vurl && isValidUrl(vurl)) {
-        const tUrl = toStr(video?.thumbnail?.url || video?.thumbnailUrl);
-        const tKey = toStr(video?.thumbnail?.key);
-        const tProvider = ["cloudinary", "wasabi", "s3", "local"].includes(
-          video?.thumbnail?.provider,
-        )
-          ? video.thumbnail.provider
-          : ["cloudinary", "wasabi", "s3", "local"].includes(video?.provider)
-            ? video.provider
-            : "wasabi";
+        const thumb = toStr(video?.thumbnailUrl);
 
         safeMedias = [
           {
@@ -185,22 +133,15 @@ export const createPost = async (req, res) => {
             type: "video",
 
             provider: ["cloudinary", "wasabi", "s3", "local"].includes(
-              video?.provider,
+              video?.provider
             )
               ? video.provider
               : undefined,
             publicId: toStr(video?.publicId) || undefined,
             key: toStr(video?.key) || undefined,
 
-            // ✅ NEW: thumbnail object (wasabi-friendly)
-            thumbnail:
-              isValidUrl(tUrl) || tKey
-                ? {
-                    url: isValidUrl(tUrl) ? tUrl : null,
-                    key: tKey || null,
-                    provider: tProvider,
-                  }
-                : undefined,
+            // ✅ IMPORTANT: thumbnail should be remote url, not file://
+            thumbnailUrl: isValidUrl(thumb) ? thumb : undefined,
 
             duration: Number.isFinite(Number(video?.durationSec))
               ? Number(video.durationSec)
@@ -229,78 +170,24 @@ export const createPost = async (req, res) => {
     }
 
     // ✅ Legacy support
-    // if (!safeMedias.length && Array.isArray(medias)) {
-    //   safeMedias = medias
-    //     .filter((m) => m?.url && (m?.type === "image" || m?.type === "video"))
-    //     .slice(0, 10)
-    //     .map((m) => ({
-    //       url: m.url,
-    //       type: m.type,
-    //       provider: ["cloudinary", "wasabi", "s3", "local"].includes(
-    //         m?.provider
-    //       )
-    //         ? m.provider
-    //         : undefined,
-    //       publicId: toStr(m?.publicId) || undefined,
-    //       key: toStr(m?.key) || undefined,
-    //       thumbnailUrl: isValidUrl(toStr(m?.thumbnailUrl))
-    //         ? toStr(m.thumbnailUrl)
-    //         : undefined,
-    //     }));
-    // }
-
-    // ✅ Legacy support (updated for thumbnail object)
     if (!safeMedias.length && Array.isArray(medias)) {
       safeMedias = medias
         .filter((m) => m?.url && (m?.type === "image" || m?.type === "video"))
         .slice(0, 10)
-        .map((m) => {
-          const provider = ["cloudinary", "wasabi", "s3", "local"].includes(
-            m?.provider,
+        .map((m) => ({
+          url: m.url,
+          type: m.type,
+          provider: ["cloudinary", "wasabi", "s3", "local"].includes(
+            m?.provider
           )
             ? m.provider
-            : undefined;
-
-          // legacy: thumbnailUrl (string) OR new: thumbnail {url,key,provider}
-          const tUrl = toStr(m?.thumbnail?.url || m?.thumbnailUrl);
-          const tKey = toStr(m?.thumbnail?.key);
-          const tProvider = ["cloudinary", "wasabi", "s3", "local"].includes(
-            m?.thumbnail?.provider,
-          )
-            ? m.thumbnail.provider
-            : provider || "wasabi";
-
-          const hasThumb = isValidUrl(tUrl) || !!tKey;
-
-          return {
-            url: toStr(m.url),
-            type: m.type,
-
-            provider,
-            publicId: toStr(m?.publicId) || undefined,
-            key: toStr(m?.key) || undefined,
-
-            // ✅ NEW: thumbnail object for wasabi/s3
-            thumbnail: hasThumb
-              ? {
-                  url: isValidUrl(tUrl) ? tUrl : null,
-                  key: tKey || null,
-                  provider: tProvider,
-                }
-              : undefined,
-
-            // optional meta if you want to carry legacy meta too
-            width: Number.isFinite(Number(m?.width))
-              ? Number(m.width)
-              : undefined,
-            height: Number.isFinite(Number(m?.height))
-              ? Number(m.height)
-              : undefined,
-            duration: Number.isFinite(Number(m?.duration))
-              ? Number(m.duration)
-              : undefined,
-          };
-        });
+            : undefined,
+          publicId: toStr(m?.publicId) || undefined,
+          key: toStr(m?.key) || undefined,
+          thumbnailUrl: isValidUrl(toStr(m?.thumbnailUrl))
+            ? toStr(m.thumbnailUrl)
+            : undefined,
+        }));
     }
 
     const doc = await Post.create({
@@ -337,7 +224,7 @@ export const createPost = async (req, res) => {
 
     const populated = await Post.findById(doc._id).populate(
       "author",
-      "name username avatar",
+      "name username avatar"
     );
 
     return res.json({ success: true, post: populated });
@@ -347,7 +234,7 @@ export const createPost = async (req, res) => {
       .json({ message: e?.message || "Create post failed" });
   }
 };
-//done f - s
+ //done f - s
 
 export const updatePost = async (req, res) => {
   try {
@@ -367,7 +254,7 @@ export const updatePost = async (req, res) => {
 
     const populated = await Post.findById(post._id).populate(
       "author",
-      "name username avatar",
+      "name username avatar"
     );
     return res.json({ success: true, post: populated });
   } catch (e) {
@@ -378,6 +265,7 @@ export const updatePost = async (req, res) => {
 };
 
 export const deletePost = async (req, res) => {
+  console.log('req',req.params);
   
   try {
     const userId = req.user?._id;
@@ -421,13 +309,14 @@ export const deletePost = async (req, res) => {
   }
 };
 
+
 export const getPostById = async (req, res) => {
   try {
     const postId = req.params.id;
 
     const post = await Post.findOne({ _id: postId, isDeleted: false }).populate(
       "author",
-      "name username avatar",
+      "name username avatar"
     );
 
     if (!post) return res.status(404).json({ message: "Post not found" });
@@ -442,6 +331,7 @@ export const getPostById = async (req, res) => {
     return res.status(500).json({ message: e?.message || "Get post failed" });
   }
 };
+
 
 export const getFeed = async (req, res) => {
   try {
@@ -458,7 +348,7 @@ export const getFeed = async (req, res) => {
     }
 
     const data = await getHomeFeed({ userId, limit, cursor });
-
+    
     return res.json({ success: true, ...data });
   } catch (e) {
     return res.status(500).json({ message: e?.message || "Feed failed" });
@@ -478,7 +368,7 @@ export const savePost = async (req, res) => {
     const r = await Save.updateOne(
       { user: userId, post: postId },
       { $setOnInsert: { user: userId, post: postId, createdAt: new Date() } },
-      { upsert: true },
+      { upsert: true }
     );
 
     // ✅ only increment when newly inserted
@@ -486,11 +376,7 @@ export const savePost = async (req, res) => {
 
     if (inserted) {
       await Post.updateOne({ _id: postId }, { $inc: { saveCount: 1 } });
-      return res.json({
-        success: true,
-        source: true,
-        message: "Post saved successful",
-      });
+      return res.json({ success: true, source: true, message: "Post saved successful" });
     } else {
       // already saved আগে থেকেই
       return res.json({
@@ -503,6 +389,7 @@ export const savePost = async (req, res) => {
     return res.status(500).json({ message: e?.message || "Save failed" });
   }
 }; // done f - s
+
 
 export const unsavePost = async (req, res) => {
   try {
@@ -547,80 +434,8 @@ export const getSavedPosts = async (req, res) => {
   }
 };
 
-// long video crate post
-// export const createLongVideoPost = async (req, res) => {
-//   try {
-//     const userId = req.user?._id;
-//     if (!userId)
-//       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-//     // ✅ text fields
-//     const title = String(req.body?.title || "").trim();
-//     const description = String(req.body?.description || "").trim();
-//     const subCategory = String(req.body?.subCategory || "other").trim();
-
-//     // ✅ files
-//     const videoFile = req.files?.video?.[0];
-//     const thumbFile = req.files?.thumbnail?.[0];
-
-//     if (!videoFile) {
-//       return res
-//         .status(400)
-//         .json({ success: false, message: "video required" });
-//     }
-
-//     // ✅ upload to wasabi (stream)
-//     const upVideo = await uploadToWasabiFilePath({
-//       filePath: videoFile.path,
-//       mimetype: videoFile.mimetype,
-//       folder: "long-videos",
-//     });
-
-//     let upThumb = null;
-//     if (thumbFile?.path) {
-//       upThumb = await uploadToWasabiFilePath({
-//         filePath: thumbFile.path,
-//         mimetype: thumbFile.mimetype,
-//         folder: "video-thumbs",
-//       });
-//     }
-
-//     // ✅ cleanup tmp
-//     safeUnlink(videoFile.path);
-//     if (thumbFile?.path) safeUnlink(thumbFile.path);
-
-//     // ✅ save post
-//     const doc = await Post.create({
-//       author: userId,
-//       type: "video",
-//       privacy: "public",
-//       text: title || "",
-//       description: description || "",
-//       category: "general", // ✅ fixed
-//       subCategory: subCategory || "other",
-//       videoMode: "normal",
-
-//       medias: [
-//         {
-//           type: "video",
-//           url: upVideo.url,
-//           key: upVideo.key,
-//           provider: "wasabi",
-//           thumbnailUrl: upThumb?.url || null,
-//           // thumbnailKey: upThumb?.key (schema থাকলে)
-//         },
-//       ],
-//     });
-
-//     return res.json({ success: true, post: doc });
-//   } catch (e) {
-//     console.log("createLongVideoPost error:", e);
-//     return res
-//       .status(500)
-//       .json({ success: false, message: e?.message || "Upload failed" });
-//   }
-// };
-// long video create post (JSON body, already uploaded on RN)
+// long video crate post 
 export const createLongVideoPost = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -632,64 +447,55 @@ export const createLongVideoPost = async (req, res) => {
     const description = String(req.body?.description || "").trim();
     const subCategory = String(req.body?.subCategory || "other").trim();
 
-    // ✅ uploaded refs from RN (wasabi)
-    const video = req.body?.video;       // { url, key, provider }
-    const thumbnail = req.body?.thumbnail; // { url, key, provider }
+    // ✅ files
+    const videoFile = req.files?.video?.[0];
+    const thumbFile = req.files?.thumbnail?.[0];
 
-    const toStr = (v) => (typeof v === "string" ? v.trim() : "");
-    const isValidUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
-    const isValidProvider = (p) =>
-      ["cloudinary", "wasabi", "s3", "local"].includes(p);
+    if (!videoFile) {
+      return res
+        .status(400)
+        .json({ success: false, message: "video required" });
+    }
 
-    // ✅ validate video
-    const vUrl = toStr(video?.url);
-    const vKey = toStr(video?.key);
-    const vProvider = isValidProvider(video?.provider) ? video.provider : "wasabi";
+    // ✅ upload to wasabi (stream)
+    const upVideo = await uploadToWasabiFilePath({
+      filePath: videoFile.path,
+      mimetype: videoFile.mimetype,
+      folder: "long-videos",
+    });
 
-    if (!isValidUrl(vUrl) || !vKey) {
-      return res.status(400).json({
-        success: false,
-        message: "video object required (url, key, provider)",
+    let upThumb = null;
+    if (thumbFile?.path) {
+      upThumb = await uploadToWasabiFilePath({
+        filePath: thumbFile.path,
+        mimetype: thumbFile.mimetype,
+        folder: "video-thumbs",
       });
     }
 
-    // ✅ sanitize thumbnail (optional)
-    const tUrl = toStr(thumbnail?.url);
-    const tKey = toStr(thumbnail?.key);
-    const tProvider = isValidProvider(thumbnail?.provider)
-      ? thumbnail.provider
-      : vProvider;
-
-    const hasThumb = isValidUrl(tUrl) || !!tKey;
+    // ✅ cleanup tmp
+    safeUnlink(videoFile.path);
+    if (thumbFile?.path) safeUnlink(thumbFile.path);
 
     // ✅ save post
     const doc = await Post.create({
       author: userId,
       type: "video",
       privacy: "public",
-
-      text: title || "",
-      description: description || "",
-
-      category: "general",
+      text: title||"",
+      description:description || "",
+      category: "general", // ✅ fixed
       subCategory: subCategory || "other",
       videoMode: "normal",
 
       medias: [
         {
           type: "video",
-          url: vUrl,
-          key: vKey,
-          provider: vProvider,
-
-          // ✅ NEW thumbnail object (matches your schema change)
-          thumbnail: hasThumb
-            ? {
-                url: isValidUrl(tUrl) ? tUrl : null,
-                key: tKey || null,
-                provider: tProvider,
-              }
-            : null,
+          url: upVideo.url,
+          key: upVideo.key,
+          provider: "wasabi",
+          thumbnailUrl: upThumb?.url || null,
+          // thumbnailKey: upThumb?.key (schema থাকলে)
         },
       ],
     });

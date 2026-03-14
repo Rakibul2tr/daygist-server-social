@@ -114,13 +114,11 @@ export async function getWasabiSignedUrl(key, expiresInSec = 3600) {
   const bucket = process.env.WASABI_BUCKET;
   if (!bucket) throw new Error("WASABI_BUCKET missing");
   if (!key) throw new Error("key missing");
-  
 
   const cmd = new GetObjectCommand({ Bucket: bucket, Key: key });
   const signedUrl = await getSignedUrl(wasabiS3, cmd, {
     expiresIn: expiresInSec,
   });
-  
   return signedUrl;
 }
 
@@ -160,7 +158,6 @@ export async function uploadToWasabiFilePath({
   const url = base
     ? `${base}/${key}`
     : `${process.env.WASABI_ENDPOINT}/${bucket}/${key}`;
-  
 
   return { key, url };
 }

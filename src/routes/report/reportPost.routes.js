@@ -13,12 +13,7 @@ import { isAdmin } from "../../middleware/isAdminMiddleware.js";
 const router = Router();
 
 // USER
-router.post("/posts/:postId", authGuard, createPostReport);
-router.post(
-  "/group/:groupId/post/:postId",
-  authGuard,
-  createPostReport,
-);
+router.post("/posts/:postId/", authGuard, createPostReport);
 router.get("/get/me", authGuard, myReports);
 
 // ADMIN

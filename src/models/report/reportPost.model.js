@@ -4,34 +4,15 @@ import mongoose, { Schema } from "mongoose";
 
 const ReportSchema = new Schema(
   {
-    targetType: {
-      type: String,
-      enum: ["post", "groupPost"],
-      default: "post",
-      index: true,
-    },
+    targetType: { type: String, enum: ["post"], default: "post", index: true },
 
     targetId: { type: Schema.Types.ObjectId, required: true, index: true }, // postId
 
-    reporter: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
+    reporter: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
 
     reason: {
       type: String,
-      enum: [
-        "spam",
-        "scam",
-        "nudity",
-        "hate",
-        "violence",
-        "harassment",
-        "copyright",
-        "other",
-      ],
+      enum: ["spam","scam","nudity","hate","violence","harassment","copyright","other"],
       required: true,
       index: true,
     },
@@ -52,7 +33,7 @@ const ReportSchema = new Schema(
     // optional snapshot
     targetOwner: { type: Schema.Types.ObjectId, ref: "User", index: true }, // post owner id (quick filter)
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 // ✅ prevent same user spamming same post রিপোর্ট multiple times

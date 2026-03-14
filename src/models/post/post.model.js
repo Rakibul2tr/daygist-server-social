@@ -32,22 +32,14 @@ const mediaSchema = new mongoose.Schema(
     key: { type: String, default: null },
 
     // ✅ For video: should be REMOTE url (not file:///)
-    thumbnail: {
-      url: { type: String, default: null, trim: true },
-      key: { type: String, default: null },
-      provider: {
-        type: String,
-        enum: ["cloudinary", "wasabi", "s3", "local"],
-        default: "wasabi",
-      },
-    },
+    thumbnailUrl: { type: String, default: null },
 
     // optional meta
     width: { type: Number, default: null },
     height: { type: Number, default: null },
     duration: { type: Number, default: null }, // seconds
   },
-  { _id: false },
+  { _id: false }
 );
 
 const textStyleSchema = new mongoose.Schema(

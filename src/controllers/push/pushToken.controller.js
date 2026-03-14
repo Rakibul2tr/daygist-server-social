@@ -12,22 +12,9 @@ export const registerPushToken = async (req, res) => {
     if (!token)
       return res.status(400).json({ ok: false, message: "Token required" });
 
-    // await PushToken.updateOne(
-    //   { userId, token },
-    //   { $set: { platform, disabled: false, lastSeenAt: new Date() } },
-    //   { upsert: true },
-    // );
     await PushToken.updateOne(
-      { token }, // ✅ token is unique
-      {
-        $set: {
-          userId,
-          platform,
-          disabled: false,
-          lastSeenAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
+      { userId, token },
+      { $set: { platform, disabled: false, lastSeenAt: new Date() } },
       { upsert: true },
     );
 
@@ -47,15 +34,10 @@ export const unregisterPushToken = async (req, res) => {
     if (!token)
       return res.status(400).json({ ok: false, message: "Token required" });
 
-    // await PushToken.updateOne({ userId, token }, { $set: { disabled: true } });
-    await PushToken.updateOne(
-      { token },
-      { $set: { disabled: true, lastSeenAt: new Date() } },
-    );
+    await PushToken.updateOne({ userId, token }, { $set: { disabled: true } });
 
     return res.json({ ok: true });
   } catch (e) {
-    if (e?.code === 11000) return res.json({ ok: true });
     return res.status(500).json({ ok: false, message: e?.message || "Failed" });
   }
 };

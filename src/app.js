@@ -17,6 +17,8 @@ import withdrawRoutes from "./routes/withdraw/withdraw.routes.js";
 import pushNotificationRoutes from "./routes/push/push.routes.js";
 import notificationRoutes from "./routes/notification/notification.routes.js";
 
+
+
 // admin
 import adminPostRoutes from "./routes/admin/adminPost.routes.js";
 import adminUserRoutes from "./routes/admin/adminUser.routes.js";
@@ -27,6 +29,14 @@ import adminGroupRoutes from "./routes/admin/adminGroup.routes.js";
 import adminGroupPostRoutes from "./routes/admin/adminGroupPost.routes.js";
 import adminAdsRoutes from "./routes/admin/adminAds.routes.js"
 import AdminWalletSettings from "./routes/admin/walletSettings.routes.js"
+
+
+
+// chatting
+import chatRoutes from "./routes/chat/chat.routes.js";
+
+
+
 
 
 
@@ -70,6 +80,10 @@ app.use("/admin",adminAdsRoutes)
 app.use("/admin",AdminWalletSettings)
 
 
+
+// chatting
+
+app.use("/chat", chatRoutes);
 
 
 export default app;

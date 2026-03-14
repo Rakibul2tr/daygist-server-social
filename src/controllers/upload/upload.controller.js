@@ -58,7 +58,47 @@ export const uploadVideo = async (req, res) => {
   }
 };
 
+export const uploadVoice = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, message: "file missing" });
+    }
 
+    // ✅ validate mime types (safe)
+    const okTypes = [
+      "audio/m4a",
+      "audio/mp4",
+      "audio/aac",
+      "audio/mpeg", // mp3
+      "audio/wav",
+      "audio/x-wav",
+      "audio/ogg",
+      "audio/webm",
+    ];
+
+    const mime = String(req.file.mimetype || "").toLowerCase();
+    if (!okTypes.includes(mime)) {
+      return res.status(400).json({
+        ok: false,
+        message: `invalid audio type: ${req.file.mimetype}`,
+      });
+    }
+
+    const result = await uploadToWasabi({
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      originalname: req.file.originalname,
+      folder: "voices", // ✅ folder
+    });
+
+    return res.json({ ok: true, provider: "wasabi", ...result });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "upload failed",
+    });
+  }
+};
 // for image showing
 export const signedUrl = async (req, res) => {
   try {

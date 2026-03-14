@@ -24,7 +24,7 @@ const groupMemberSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ["active", "requested", "invited", "blocked"],
-      default: "requested",
+      default: "active",
     },
   },
   { timestamps: true }

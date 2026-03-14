@@ -1,4 +1,5 @@
 
+
 import mongoose from "mongoose";
 import Post from "../../models/post/post.model.js";
 import PostLike from "../../models/post/postLike.model.js";
@@ -14,6 +15,7 @@ export const likePost = async (req, res) => {
     const id = String(req.params.postId || "");
     const type = String(req.query.type || "post"); // post | groupPost
     // console.log("type", req.query.type);
+    
 
     if (!me) return res.status(401).json({ message: "Unauthorized" });
     if (!mongoose.isValidObjectId(id))
@@ -29,8 +31,8 @@ export const likePost = async (req, res) => {
       })
         .select("_id counts.likeCount")
         .lean();
-      // console.log('post',post);
-
+        // console.log('post',post);
+        
       if (!post) return res.status(404).json({ message: "Post not found" });
 
       const r = await GroupPostLike.updateOne(

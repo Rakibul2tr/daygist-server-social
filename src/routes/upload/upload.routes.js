@@ -3,7 +3,7 @@ import { Router } from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-import { signedUrl, uploadImage, uploadImageCloudinary, uploadVideo, uploadVideoCloudinary } from "../../controllers/upload/upload.controller.js";
+import { signedUrl, uploadImage, uploadImageCloudinary, uploadVideo, uploadVideoCloudinary, uploadVoice } from "../../controllers/upload/upload.controller.js";
 import { authGuard } from "../../middleware/authMiddleware.js";
 const router = Router();
 
@@ -19,7 +19,7 @@ const uploadImg = multer({
   },
 });
 
-router.post("/image", uploadImg.single("file"), uploadImage);
+router.post("/image",authGuard, uploadImg.single("file"), uploadImage);
 
 /* ----------------------- VIDEO (recommended) ----------------------- */
 const TMP_DIR = path.join(process.cwd(), "tmp");
@@ -40,8 +40,15 @@ const uploadVid = multer({
   },
 });
 
-router.post("/video", uploadVid.single("file"), uploadVideo);
+router.post("/video",authGuard, uploadVid.single("file"), uploadVideo);
 
+
+// example
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+});
+router.post("/voice", authGuard, upload.single("file"), uploadVoice);
 
 // for image showing signed url
 // route
@@ -52,10 +59,7 @@ router.get("/signed", authGuard, signedUrl);
 
 // ✅ Cloudinary
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 80 * 1024 * 1024 }, // ✅ video 80MB (change if needed)
-});
+
 router.post("/cloud/image", upload.single("file"), uploadImageCloudinary);
 router.post("/cloud/video", upload.single("file"), uploadVideoCloudinary);
 

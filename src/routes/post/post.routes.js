@@ -11,8 +11,8 @@ import {
   getSavedPosts,
 } from "../../controllers/post/post.controller.js";
 import { getPostLikes, likePost, unlikePost } from "../../controllers/post/postLike.controller.js";
+import { getPostShares, sharePost } from "../../controllers/post/postShare.controller.js";
 import { addView } from "../../controllers/post/videoView.controller.js";
-import { getPostShares, sharePost } from "../../controllers/share/share.contoller.js";
 
 const router = Router();
 

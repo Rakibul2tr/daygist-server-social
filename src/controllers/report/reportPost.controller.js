@@ -2,107 +2,33 @@
 import mongoose from "mongoose";
 import Report from "../../models/report/reportPost.model.js";
 import Post from "../../models/post/post.model.js"; // তোমার Post model path ঠিক করো
-import GroupPost from "../../models/group/groupPost.model.js";
 
-// const isObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
-
-// export async function createPostReport(req, res) {
-//   const reporterId = req.user?.id; // requireAuth middleware থেকে
-//   const { postId } = req.params;
-//   const { reason, details } = req.body || {};
-
-//   if (!isObjectId(postId)) return res.status(400).json({ ok: false, message: "Invalid postId" });
-//   if (!reason) return res.status(400).json({ ok: false, message: "reason is required" });
-
-//   const post = await Post.findById(postId).select("_id author").lean();
-//   if (!post) return res.status(404).json({ ok: false, message: "Post not found" });
-
-//   try {
-//     const doc = await Report.create({
-//       targetType: "post",
-//       targetId: post._id,
-//       reporter: reporterId,
-//       reason,
-//       details: String(details || "").slice(0, 1000),
-//       targetOwner: post.author,
-//     });
-
-//     return res.json({ ok: true, report: doc });
-//   } catch (e) {
-//     // unique index hit => already reported
-//     if (e?.code === 11000) {
-//       return res.status(409).json({ ok: false, message: "Already reported" });
-//     }
-//     return res.status(500).json({ ok: false, message: "Report failed" });
-//   }
-// }
-
-
-
-const isObjectId = (id) => mongoose.Types.ObjectId.isValid(String(id || ""));
+const isObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 export async function createPostReport(req, res) {
-  const reporterId = req.user?._id || req.user?.id; // support both shapes
-
+  const reporterId = req.user?.id; // requireAuth middleware থেকে
   const { postId } = req.params;
-  const groupIdRaw =
-    req.params?.groupId || req.body?.groupId || req.query?.groupId; // ✅ any way you pass
-  const groupId = groupIdRaw ? String(groupIdRaw) : null;
-
   const { reason, details } = req.body || {};
 
-  if (!reporterId)
-    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  if (!isObjectId(postId)) return res.status(400).json({ ok: false, message: "Invalid postId" });
+  if (!reason) return res.status(400).json({ ok: false, message: "reason is required" });
 
-  if (!isObjectId(postId))
-    return res.status(400).json({ ok: false, message: "Invalid postId" });
-
-  if (!reason)
-    return res.status(400).json({ ok: false, message: "reason is required" });
-
-  // ✅ Decide target type
-  const isGroupPost = !!groupId; // if groupId present => group post
-  if (isGroupPost && !isObjectId(groupId)) {
-    return res.status(400).json({ ok: false, message: "Invalid groupId" });
-  }
-
-  // ✅ Load target doc from correct model
-  let targetDoc = null;
-
-  if (isGroupPost) {
-    // group post validation
-    targetDoc = await GroupPost.findOne({
-      _id: postId,
-      groupId: new mongoose.Types.ObjectId(groupId),
-      isDeleted: { $ne: true },
-    })
-      .select("_id authorId groupId")
-      .lean();
-  } else {
-    // normal post validation
-    targetDoc = await Post.findById(postId).select("_id author").lean();
-  }
-
-  if (!targetDoc)
-    return res.status(404).json({ ok: false, message: "Post not found" });
-
-  // ✅ owner field name differs
-  const targetOwner = isGroupPost ? targetDoc.authorId : targetDoc.author;
+  const post = await Post.findById(postId).select("_id author").lean();
+  if (!post) return res.status(404).json({ ok: false, message: "Post not found" });
 
   try {
     const doc = await Report.create({
-      targetType: isGroupPost ? "groupPost" : "post",
-      targetId: targetDoc._id,
+      targetType: "post",
+      targetId: post._id,
       reporter: reporterId,
       reason,
       details: String(details || "").slice(0, 1000),
-      targetOwner,
-      // optional metadata:
-      meta: isGroupPost ? { groupId: targetDoc.groupId } : undefined,
+      targetOwner: post.author,
     });
 
     return res.json({ ok: true, report: doc });
   } catch (e) {
+    // unique index hit => already reported
     if (e?.code === 11000) {
       return res.status(409).json({ ok: false, message: "Already reported" });
     }

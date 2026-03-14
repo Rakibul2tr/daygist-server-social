@@ -27,16 +27,12 @@ const makeUniqueSlug = async (base) => {
 export const createGroup = async (req, res) => {
   const me = req.user?._id;
   if (!me) return res.status(401).json({ message: "Unauthorized" });
-  
-  
 
   const check = validateCreateGroupBody(req.body);
   if (!check.ok) return res.status(400).json({ message: check.message });
 
   const session = await mongoose.startSession();
   session.startTransaction();
-
-  
 
   try {
     const name = String(req.body.name).trim();
@@ -741,6 +737,7 @@ export const getGroupDetails = async (req, res) => {
   try {
     const me = req.user?._id; // auth থাকলে
     const groupId = String(req.params.groupId || "").trim();
+    console.log('group id',groupId);
     
 
     if (!mongoose.Types.ObjectId.isValid(groupId)) {
@@ -961,7 +958,6 @@ export const getGroupMembers = async (req, res) => {
 export const updateGroupMemberStatus = async (req, res) => {
   const me = req.user?._id;
   const { groupId, memberId } = req.params;
-  
 
   if (!me) return res.status(401).json({ message: "Unauthorized" });
   if (!mongoose.isValidObjectId(groupId) || !mongoose.isValidObjectId(memberId)) {
@@ -970,7 +966,6 @@ export const updateGroupMemberStatus = async (req, res) => {
 
   const nextStatus = String(req.body?.status || "").trim(); // active/rejected/blocked
   const allowed = ["active", "rejected", "blocked"];
-  
   if (!allowed.includes(nextStatus)) {
     return res.status(400).json({ message: "Invalid status" });
   }
@@ -986,7 +981,6 @@ export const updateGroupMemberStatus = async (req, res) => {
       status: "active",
       role: { $in: ["admin", "moderator", "owner"] }, // তোমার role list অনুযায়ী
     }).session(session);
-    
 
     if (!myMem) {
       await session.abortTransaction();
@@ -1016,12 +1010,8 @@ export const updateGroupMemberStatus = async (req, res) => {
     }
 
     // ✅ 3) update status
-    if (nextStatus === "rejected") {
-      await mem.deleteOne({ session });
-    } else {
-      mem.status = nextStatus;
-      await mem.save({ session });
-    }
+    mem.status = nextStatus;
+    await mem.save({ session });
 
     // ✅ 4) group counts fix (only when status changes affect member count)
     // rule: only "active" members are counted in Group.counts.members

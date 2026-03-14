@@ -1,3 +1,155 @@
+// // src/services/feed/getHomeFeed.js
+// import mongoose from "mongoose";
+// import Post from "../../models/post/post.model.js";
+// import Follow from "../../models/follow/follow.model.js";
+// import PostLike from "../../models/post/postLike.model.js";
+// import PostShare from "../../models/post/postShare.model.js";
+
+
+// export async function getHomeFeed({ userId, limit = 20, cursor }) {
+//   const take = Math.min(Number(limit) || 20, 50);
+
+//   let cursorFilter = {};
+//   if (cursor?.createdAt && cursor?._id) {
+//     cursorFilter = {
+//       $or: [
+//         { createdAt: { $lt: new Date(cursor.createdAt) } },
+//         {
+//           createdAt: new Date(cursor.createdAt),
+//           _id: { $lt: new mongoose.Types.ObjectId(cursor._id) },
+//         },
+//       ],
+//     };
+//   }
+
+//   // ✅ user follows list (guest হলে empty)
+//   const followingDocs = userId
+//     ? await Follow.find({ follower: userId }).select("following").lean()
+//     : [];
+
+//   const followingIds = followingDocs.map((f) => f.following); // ObjectId[]
+
+//   const items = await Post.aggregate([
+//     { $match: { isDeleted: false, ...cursorFilter } },
+
+//     // ✅ boolean: author is in my following list?
+//     {
+//       $addFields: {
+//         isFollowingAuthor: { $in: ["$author", followingIds] }, // true/false
+//       },
+//     },
+
+//     // ✅ followed first, then newest
+//     { $sort: { isFollowingAuthor: -1, createdAt: -1, _id: -1 } },
+
+//     { $limit: take },
+
+//     {
+//       $lookup: {
+//         from: "users",
+//         localField: "author",
+//         foreignField: "_id",
+//         as: "author",
+//       },
+//     },
+//     { $unwind: "$author" },
+
+//     // ✅ attach to author
+//     {
+//       $addFields: {
+//         "author.isFollowing": "$isFollowingAuthor",
+//         "author.isMe": userId
+//           ? { $eq: ["$author._id", new mongoose.Types.ObjectId(userId)] }
+//           : false,
+//       },
+//     },
+
+//     {
+//       $project: {
+//         // author
+//         "author._id": 1,
+//         "author.name": 1,
+//         "author.username": 1,
+//         "author.avatar": 1,
+//         "author.profilePic": 1,
+//         "author.isFollowing": 1, // ✅ NEW
+//         "author.isMe": 1, // ✅ optional (button hide করতে)
+
+//         // post
+//         type: 1,
+//         privacy: 1,
+//         text: 1,
+//         backgroundUrl: 1,
+//         textStyle: 1,
+//         medias: 1,
+//         layout: 1,
+//         mutedByDefault: 1,
+//         loop: 1,
+//         videoMode: 1,
+
+//         likeCount: 1,
+//         commentCount: 1,
+//         saveCount: 1,
+//         isLiked: 1,
+//         isShared: 1,
+//         createdAt: 1,
+//         updatedAt: 1,
+//         shareCount: 1,
+//       },
+//     },
+//   ]);
+
+//   // ✅ attach isLiked / isShared for current user (single batch queries)
+//   if (userId && items.length > 0) {
+//     const postIds = items.map((p) => p._id);
+
+//     // liked posts by me
+//     const likedRows = await PostLike.find({
+//       user: userId,
+//       post: { $in: postIds },
+//     })
+//       .select("post")
+//       .lean();
+
+//     const likedSet = new Set(likedRows.map((r) => String(r.post)));
+
+//     // shared posts by me
+//     const sharedRows = await PostShare.find({
+//       user: userId,
+//       post: { $in: postIds },
+//     })
+//       .select("post")
+//       .lean();
+
+//     const sharedSet = new Set(sharedRows.map((r) => String(r.post)));
+
+//     // attach booleans
+//     for (const p of items) {
+//       const pid = String(p._id);
+//       p.isLiked = likedSet.has(pid);
+//       p.isShared = sharedSet.has(pid);
+//     }
+//   } else {
+//     // guest/default
+//     for (const p of items) {
+//       p.isLiked = false;
+//       p.isShared = false;
+//     }
+//   }
+
+//   const nextCursor =
+//     items.length > 0
+//       ? {
+//           createdAt: items[items.length - 1].createdAt,
+//           _id: items[items.length - 1]._id,
+//         }
+//       : null;
+
+//   return { items, nextCursor };
+// }
+
+
+
 
 // src/services/feed/getHomeFeed.js
 import mongoose from "mongoose";
@@ -13,25 +165,16 @@ import GroupMember from "../../models/group/groupMember.model.js";
 import GroupPost from "../../models/group/groupPost.model.js";
 import GroupPostShare from "../../models/group/groupPostShare.model.js";
 import GroupPostLike from "../../models/group/groupPostLike.model.js";
-import Report from "../../models/report/reportPost.model.js";
 
 const toOID = (id) => new mongoose.Types.ObjectId(id);
 
 // cursor = { createdAt, _id }
 const buildCursorFilter = (cursor) => {
   if (!cursor?.createdAt || !cursor?._id) return {};
-
-  const fp = Number(cursor.followPriority ?? 0);
-
   return {
     $or: [
-      { followPriority: { $lt: fp } },
+      { createdAt: { $lt: new Date(cursor.createdAt) } },
       {
-        followPriority: fp,
-        createdAt: { $lt: new Date(cursor.createdAt) },
-      },
-      {
-        followPriority: fp,
         createdAt: new Date(cursor.createdAt),
         _id: { $lt: new mongoose.Types.ObjectId(cursor._id) },
       },
@@ -73,33 +216,22 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
 
   const followingIds = followingDocs.map((f) => f.following); // ObjectId[]
 
-// report ids
-  const reportedPostIds = userId
-    ? await Report.distinct("targetId", {
-        reporter: new mongoose.Types.ObjectId(userId),
-        targetType: "post",
-      })
-    : [];
-   
-
-
   /* ------------------------------------------------------------------ */
   /* 1) NORMAL POSTS (your existing feed, keep it as-is)                 */
   /* ------------------------------------------------------------------ */
   const postItems = await Post.aggregate([
-    {
-      $match: {
-        isDeleted: false,
-        _id: { $nin: reportedPostIds },
-        ...cursorFilter,
-      },
-    },
+    { $match: { isDeleted: false, ...cursorFilter } },
 
     {
       $addFields: {
         feedType: "post", // ✅ mark type
       },
     },
+
+    // ✅ chronological only (FB mix base)
+    { $sort: { createdAt: -1, _id: -1 } },
+
+    { $limit: overFetch },
 
     {
       $lookup: {
@@ -110,23 +242,6 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
       },
     },
     { $unwind: "$author" },
-    {
-      $addFields: {
-        "author.isMe": userId
-          ? { $eq: ["$author._id", new mongoose.Types.ObjectId(userId)] }
-          : false,
-
-        // ✅ NEW: isFollowing (viewer -> author)
-        "author.isFollowing": userId
-          ? { $in: ["$author._id", followingIds] }
-          : false,
-
-        // ✅ NEW priority
-        followPriority: userId
-          ? { $cond: [{ $in: ["$author._id", followingIds] }, 1, 0] }
-          : 0,
-      },
-    },
 
     {
       $addFields: {
@@ -135,11 +250,6 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
           : false,
       },
     },
-
-    // ✅ chronological only (FB mix base)
-    { $sort: { followPriority: -1, createdAt: -1, _id: -1 } },
-
-    { $limit: overFetch },
 
     {
       $project: {
@@ -154,7 +264,6 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
         "author.avatarKey": 1,
         "author.profilePic": 1,
         "author.isMe": 1,
-        "author.isFollowing": 1,
 
         // post
         type: 1,
@@ -185,12 +294,6 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
   /* ------------------------------------------------------------------ */
   /* 2) GROUP POSTS (created + active member groups only)                */
   /* ------------------------------------------------------------------ */
-   const reportedGroupPostIds = userId
-     ? await Report.distinct("targetId", {
-         reporter: new mongoose.Types.ObjectId(userId),
-         targetType: "groupPost",
-       })
-     : [];
   let groupItems = [];
   if (userId) {
     const meObjId = toOID(userId);
@@ -202,7 +305,6 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
           $match: {
             groupId: { $in: allowedGroupIds },
             isDeleted: { $ne: true },
-            _id: { $nin: reportedGroupPostIds },
             ...cursorFilter,
           },
         },
@@ -231,13 +333,6 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
           },
         },
         { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
-        {
-          $addFields: {
-            "author.isFollowing": userId
-              ? { $in: ["$author._id", followingIds] }
-              : false,
-          },
-        },
 
         {
           $addFields: {
@@ -283,7 +378,6 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
               name: "$author.name",
               avatarUrl: "$author.avatarUrl",
               avatarKey: "$author.avatarKey",
-              isFollowing: "$author.isFollowing",
             },
 
             isLiked: 1,
@@ -433,13 +527,11 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
   /* ------------------------------------------------------------------ */
   /* 5) nextCursor based on final mixed items                            */
   /* ------------------------------------------------------------------ */
-  const last = sliced[sliced.length - 1];
   const nextCursor =
     sliced.length > 0
       ? {
-          followPriority: last.followPriority || 0,
-          createdAt: last.createdAt,
-          _id: last._id,
+          createdAt: sliced[sliced.length - 1].createdAt,
+          _id: sliced[sliced.length - 1]._id,
         }
       : null;
 
