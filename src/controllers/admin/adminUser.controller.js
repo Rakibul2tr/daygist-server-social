@@ -1,8 +1,105 @@
 // FILE: src/controllers/admin/adminUser.controller.js
 import User from "../../models/user/user.model.js"; // ✅ path তোমার project অনুযায়ী ঠিক করো
+import { verifyGoogleToken } from "../../utils/googleVerify.js";
+import { generateToken } from "../../utils/jwt.js";
 
 const norm = (v) => (v == null ? "" : String(v).trim());
 const up = (v) => norm(v).toUpperCase();
+
+
+export const googleAdminLoginOrCreate = async (req, res) => {
+  try {
+    const idToken = req.body?.idToken || req.body?.token;
+
+    if (!idToken) {
+      return res.status(400).json({ message: "Token required" });
+    }
+
+    const payload = await verifyGoogleToken(idToken);
+    const { sub, email, name, picture } = payload || {};
+
+    if (!sub || !email) {
+      return res.status(401).json({ message: "Invalid Google token payload" });
+    }
+
+    // ✅ only these emails can create/login as admin
+    const allowedAdminEmails = [
+      "rakibul2tr@gmail.com",
+      "owner@gmail.com",
+      "dmdhelal@gmail.com",
+    ];
+
+    if (!allowedAdminEmails.includes(email)) {
+      return res.status(403).json({
+        success: false,
+        message: "This Google account is not useable",
+      });
+    }
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        googleId: sub,
+        email,
+        name: name || "Admin",
+        avatar: {
+          url: picture || null,
+          key: null,
+          provider: "google",
+        },
+        username: name,
+        role: "ADMIN", // or "SUPPER ADMIN"
+        profileCompleted: true,
+        isNewUser: false,
+      });
+    } else {
+      // ✅ if already exists, update googleId if empty
+      if (!user.googleId) {
+        user.googleId = sub;
+      }
+
+      // optional sync
+      if (!user.name && name) {
+        user.name = name;
+      }
+
+      if (picture && !user.avatar?.url) {
+        user.avatar = {
+          url: picture,
+          key: null,
+          provider: "google",
+        };
+      }
+
+      // ✅ force role as ADMIN if needed
+      user.role = user.role || "ADMIN";
+
+      await user.save();
+    }
+
+    const token = generateToken({
+      userId: user._id,
+      role: user.role,
+      profileCompleted: user.profileCompleted,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin login successful",
+      token,
+      user,
+    });
+  } catch (error) {
+    console.log("googleAdminLoginOrCreate error:", error?.message || error);
+
+    return res.status(401).json({
+      success: false,
+      message: "Invalid Google token",
+      error: String(error?.message || error),
+    });
+  }
+};
 
 export const adminGetAllUsers = async (req, res) => {
   try {

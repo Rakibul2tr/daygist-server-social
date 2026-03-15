@@ -12,9 +12,13 @@ import {
   adminDeleteUser,
   adminRestoreUser,
   adminForceLogoutUser,
+  googleAdminLoginOrCreate,
 } from "../../controllers/admin/adminUser.controller.js";
 
 const router = express.Router();
+
+//admin login
+router.post("/google-admin-login", googleAdminLoginOrCreate);
 
 // list + details
 router.get("/users", authGuard, isAdmin, adminGetAllUsers);

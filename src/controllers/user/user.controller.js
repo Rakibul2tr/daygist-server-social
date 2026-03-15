@@ -36,12 +36,13 @@ const sanitizeEducation = (arr) => {
 
   return cleaned.length ? cleaned : [];
 };
-
 export const googleLogin = async (req, res) => {
   try {
     const idToken = req.body?.idToken || req.body?.token;
 
-    if (!idToken) return res.status(400).json({ message: "Token required" });
+    if (!idToken) {
+      return res.status(400).json({ message: "Token required" });
+    }
 
     const payload = await verifyGoogleToken(idToken);
     const { sub, email, name, picture } = payload || {};
@@ -50,20 +51,43 @@ export const googleLogin = async (req, res) => {
       return res.status(401).json({ message: "Invalid Google token payload" });
     }
 
-    let user = await User.findOne({ googleId: sub });
+    let user = await User.findOne({
+      $or: [{ googleId: sub }, { email }],
+    });
 
     if (!user) {
       user = await User.create({
         googleId: sub,
         email,
         name,
-        avatar: picture,
+        avatar: {
+          url: picture || null,
+          key: null,
+          provider: "google",
+        },
         username: generateUsername(email),
+        role: "USER",
       });
+    } else {
+      // sync googleId if account existed before
+      if (!user.googleId) user.googleId = sub;
+
+      // optional profile sync
+      if (!user.name && name) user.name = name;
+      if (!user.avatar?.url && picture) {
+        user.avatar = {
+          url: picture,
+          key: null,
+          provider: "google",
+        };
+      }
+
+      await user.save();
     }
 
     const token = generateToken({
       userId: user._id,
+      role: user.role,
       profileCompleted: user.profileCompleted,
     });
 
@@ -76,6 +100,45 @@ export const googleLogin = async (req, res) => {
     });
   }
 };
+// export const googleLogin = async (req, res) => {
+//   try {
+//     const idToken = req.body?.idToken || req.body?.token;
+
+//     if (!idToken) return res.status(400).json({ message: "Token required" });
+
+//     const payload = await verifyGoogleToken(idToken);
+//     const { sub, email, name, picture } = payload || {};
+
+//     if (!sub || !email) {
+//       return res.status(401).json({ message: "Invalid Google token payload" });
+//     }
+
+//     let user = await User.findOne({ googleId: sub });
+
+//     if (!user) {
+//       user = await User.create({
+//         googleId: sub,
+//         email,
+//         name,
+//         avatar: picture,
+//         username: generateUsername(email),
+//       });
+//     }
+
+//     const token = generateToken({
+//       userId: user._id,
+//       profileCompleted: user.profileCompleted,
+//     });
+
+//     return res.json({ success: true, token, user });
+//   } catch (error) {
+//     console.log("verify error:", error?.message || error);
+//     return res.status(401).json({
+//       message: "Invalid Google token",
+//       error: String(error?.message || error),
+//     });
+//   }
+// };
 
 export const completeProfile = async (req, res) => {
   try {

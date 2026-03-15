@@ -36,7 +36,7 @@ const educationItemSchema = new mongoose.Schema(
 
 const userSchema = new mongoose.Schema(
   {
-    googleId: { type: String, required: true, unique: true },
+    googleId: { type: String, unique: true, sparse: true, default: null },
     email: { type: String, unique: true }, // login email
     name: { type: String, default: "" },
     avatar: {
