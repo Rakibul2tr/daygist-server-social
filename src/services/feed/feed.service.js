@@ -5,7 +5,6 @@
 // import PostLike from "../../models/post/postLike.model.js";
 // import PostShare from "../../models/post/postShare.model.js";
 
-
 // export async function getHomeFeed({ userId, limit = 20, cursor }) {
 //   const take = Math.min(Number(limit) || 20, 50);
 
@@ -148,9 +147,6 @@
 //   return { items, nextCursor };
 // }
 
-
-
-
 // src/services/feed/getHomeFeed.js
 import mongoose from "mongoose";
 
@@ -196,7 +192,7 @@ async function getAllowedGroupIds(meObjId) {
   ]);
 
   const set = new Set(
-    [...memberGroupIds, ...createdGroupIds].map((x) => String(x))
+    [...memberGroupIds, ...createdGroupIds].map((x) => String(x)),
   );
 
   return Array.from(set).map((id) => toOID(id));
@@ -215,6 +211,8 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
     : [];
 
   const followingIds = followingDocs.map((f) => f.following); // ObjectId[]
+  console.log("followingIds", followingIds);
+  
 
   /* ------------------------------------------------------------------ */
   /* 1) NORMAL POSTS (your existing feed, keep it as-is)                 */
@@ -248,6 +246,9 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
         "author.isMe": userId
           ? { $eq: ["$author._id", new mongoose.Types.ObjectId(userId)] }
           : false,
+        isFollowingAuthor: userId
+          ? { $in: ["$author._id", followingIds] }
+          : false,
       },
     },
 
@@ -265,6 +266,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
         "author.profilePic": 1,
         "author.isMe": 1,
 
+        isFollowingAuthor: 1,
         // post
         type: 1,
         privacy: 1,
@@ -514,10 +516,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
       it.isShared = false;
     }
   }
-  
-  
- 
- 
+
   // ✅ unified response wrapper (Plan-1)
   const items = sliced.map((x) => ({
     feedType: x.feedType, // "post" | "groupPost"
@@ -534,6 +533,9 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
           _id: sliced[sliced.length - 1]._id,
         }
       : null;
+
+      // console.log("items", items);
+      
 
   return { items, nextCursor };
 }
