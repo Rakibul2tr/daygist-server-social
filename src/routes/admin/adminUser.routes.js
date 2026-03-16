@@ -13,6 +13,8 @@ import {
   adminRestoreUser,
   adminForceLogoutUser,
   googleAdminLoginOrCreate,
+  adminUpdateUserControls,
+  adminOverview,
 } from "../../controllers/admin/adminUser.controller.js";
 
 const router = express.Router();
@@ -24,6 +26,15 @@ router.post("/google-admin-login", googleAdminLoginOrCreate);
 router.get("/users", authGuard, isAdmin, adminGetAllUsers);
 router.get("/users/:id", authGuard, isAdmin, adminGetUserById);
 
+// all status update 1 api
+router.patch(
+  "/users/:id/update-controls",
+  authGuard,
+  isAdmin,
+  adminUpdateUserControls,
+);
+
+router.get("/overview-info", authGuard, isAdmin, adminOverview);
 // role
 router.patch("/users/:id/role", authGuard, isAdmin, adminSetUserRole);
 

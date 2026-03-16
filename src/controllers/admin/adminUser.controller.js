@@ -5,8 +5,9 @@ import { generateToken } from "../../utils/jwt.js";
 
 const norm = (v) => (v == null ? "" : String(v).trim());
 const up = (v) => norm(v).toUpperCase();
+const ALLOWED_ROLES = ["USER", "ADMIN", "SELLER", "MODERATOR", "SUPPER ADMIN"];
 
-
+// login or signup
 export const googleAdminLoginOrCreate = async (req, res) => {
   try {
     const idToken = req.body?.idToken || req.body?.token;
@@ -100,20 +101,80 @@ export const googleAdminLoginOrCreate = async (req, res) => {
     });
   }
 };
-
+// get all users
 export const adminGetAllUsers = async (req, res) => {
   try {
-    const users = await User.find({})
-      .select("-password -googleId -__v")
-      .sort({ createdAt: -1, _id: -1 })
-      .lean();
+    const page = Math.max(Number(req.query?.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query?.limit) || 10, 1), 100);
+    const skip = (page - 1) * limit;
 
-    return res.json({ ok: true, data: users });
+    const search = String(req.query?.search || "").trim();
+    const role = String(req.query?.role || "")
+      .trim()
+      .toUpperCase();
+    const isBlocked = req.query?.isBlocked;
+    const isDeleted = req.query?.isDeleted;
+
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { username: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (role) {
+      query.role = role;
+    }
+
+    if (typeof isBlocked !== "undefined") {
+      query.isBlocked = isBlocked === "true";
+    }
+
+    if (typeof isDeleted !== "undefined") {
+      query.isDeleted = isDeleted === "true";
+    }
+
+    const [users, total] = await Promise.all([
+      User.find(query)
+        .select("-password -googleId -__v")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(query),
+    ]);
+
+    return res.json({
+      ok: true,
+      data: users,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page * limit < total,
+        hasPrevPage: page > 1,
+      },
+    });
   } catch (e) {
-    return res.status(500).json({ ok: false, message: e?.message || "Failed" });
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "Failed",
+    });
   }
 };
 
+// GET /admin/users?page=1&limit=10
+// GET /admin/users?page=1&limit=10&search=rakib
+// GET /admin/users?page=1&limit=10&role=ADMIN
+// GET /admin/users?page=1&limit=10&isBlocked=true
+// GET /admin/users?page=1&limit=10&isDeleted=false
+// GET /admin/users?page=1&limit=10&search=rakib&role=USER&isBlocked=false
+
+// get user by id
 export const adminGetUserById = async (req, res) => {
   try {
     const id = req.params?.id;
@@ -128,6 +189,151 @@ export const adminGetUserById = async (req, res) => {
   }
 };
 
+// all status update in 1 api
+export const adminUpdateUserControls = async (req, res) => {
+  try {
+    const id = req.params?.id;
+    const { role, isBlocked, isDeleted, forceLogout } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        ok: false,
+        message: "Invalid user id",
+      });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        message: "User not found",
+      });
+    }
+
+    // optional self protection
+    if (String(req.user?._id) === String(id)) {
+      if (typeof isBlocked === "boolean" && isBlocked === true) {
+        return res.status(400).json({
+          ok: false,
+          message: "You cannot block yourself",
+        });
+      }
+
+      if (typeof isDeleted === "boolean" && isDeleted === true) {
+        return res.status(400).json({
+          ok: false,
+          message: "You cannot delete yourself",
+        });
+      }
+
+      if (forceLogout === true) {
+        return res.status(400).json({
+          ok: false,
+          message: "You cannot force logout yourself",
+        });
+      }
+    }
+
+    // role update
+    if (typeof role !== "undefined") {
+      const normalizedRole = String(role).trim().toUpperCase();
+
+      if (!ALLOWED_ROLES.includes(normalizedRole)) {
+        return res.status(400).json({
+          ok: false,
+          message: "Invalid role",
+        });
+      }
+
+      user.role = normalizedRole;
+    }
+
+    // block/unblock
+    if (typeof isBlocked === "boolean") {
+      user.isBlocked = isBlocked;
+      user.blockedAt = isBlocked ? new Date() : null;
+    }
+
+    // delete/restore
+    if (typeof isDeleted === "boolean") {
+      user.isDeleted = isDeleted;
+      user.deletedAt = isDeleted ? new Date() : null;
+    }
+
+    // force logout
+    if (forceLogout === true) {
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+    }
+
+    await user.save();
+
+    const updatedUser = await User.findById(id).select("-googleId -__v").lean();
+
+    return res.json({
+      ok: true,
+      message: "User controls updated successfully",
+      data: updatedUser,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "Update failed",
+    });
+  }
+}; 
+
+// over view api users count,delete, blocks,sellers,monetization etc
+export const adminOverview = async (req, res) => {
+  try {
+    const [
+      allUsers,
+      pendingUsers,
+      blockedUsers,
+      sellerUsers,
+      monetizationUsers,
+      deletedUsers,
+    ] = await Promise.all([
+      User.countDocuments({ isDeleted: { $ne: true } }),
+      User.countDocuments({
+        isDeleted: { $ne: true },
+        profileCompleted: false,
+      }),
+      User.countDocuments({
+        isDeleted: { $ne: true },
+        isBlocked: true,
+      }),
+      User.countDocuments({
+        isDeleted: { $ne: true },
+        isSeller: true,
+      }),
+      User.countDocuments({
+        isDeleted: { $ne: true },
+        isMonetization: true,
+      }),
+      User.countDocuments({
+        isDeleted: true,
+      }),
+    ]);
+
+    return res.status(200).json({
+      ok: true,
+      message: "Admin overview fetched successfully",
+      data: {
+        allUsers,
+        pendingUsers,
+        blockedUsers,
+        sellerUsers,
+        monetizationUsers,
+        deletedUsers,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "Failed to fetch admin overview",
+    });
+  }
+};
 // ✅ Role change
 export const adminSetUserRole = async (req, res) => {
   try {

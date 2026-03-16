@@ -84,6 +84,10 @@ const userSchema = new mongoose.Schema(
 
     profileCompleted: { type: Boolean, default: false },
     isBlocked: { type: Boolean, default: false },
+    blockedAt: { type: Date, default: null },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    tokenVersion: { type: Number, default: 0 },
     isNewUser: { type: Boolean, default: false },
     isSeller: { type: Boolean, default: false },
     isMonetization: { type: Boolean, default: false },
