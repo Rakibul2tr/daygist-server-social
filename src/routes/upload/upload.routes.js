@@ -3,7 +3,7 @@ import { Router } from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-import { signedUrl, uploadImage, uploadImageCloudinary, uploadVideo, uploadVideoCloudinary, uploadVoice } from "../../controllers/upload/upload.controller.js";
+import { deleteUploadedFile, signedUrl, uploadImage, uploadImageCloudinary, uploadVideo, uploadVideoCloudinary, uploadVoice } from "../../controllers/upload/upload.controller.js";
 import { authGuard } from "../../middleware/authMiddleware.js";
 const router = Router();
 
@@ -54,8 +54,8 @@ router.post("/voice", authGuard, upload.single("file"), uploadVoice);
 // route
 router.get("/signed", authGuard, signedUrl);
 
-
-
+// delete media only with key
+router.delete("/delete", authGuard, deleteUploadedFile);
 
 // ✅ Cloudinary
 

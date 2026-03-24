@@ -1,7 +1,11 @@
 import Post from "../../models/post/post.model.js";
 import Save from "../../models/post/save.model.js";
+import PostShare from "../../models/post/postShare.model.js";
+import Comment from "../../models/comment/comment.model.js";
+import VideoView from "../../models/post/videoView.model.js";
 import { getHomeFeed } from "../../services/feed/feed.service.js";
 import { deleteManyFromWasabi, uploadToWasabiFilePath } from "../../services/wbUpload.service.js";
+import PostLike from "../../models/post/postLike.model.js";
 
 const isOwner = (post, userId) => String(post.author) === String(userId);
 const toStr = (v) => (typeof v === "string" ? v.trim() : "");
@@ -264,51 +268,130 @@ export const updatePost = async (req, res) => {
   }
 };
 
-export const deletePost = async (req, res) => {
-  console.log('req',req.params);
+// export const deletePost = async (req, res) => {
+//   console.log('req',req.params);
   
+//   try {
+//     const userId = req.user?._id;
+//     const postId = req.params.id;
+
+//     const post = await Post.findById(postId).lean();
+//     if (!post || post.isDeleted)
+//       return res.status(404).json({ message: "Post not found" });
+
+//     if (!isOwner(post, userId))
+//       return res.status(403).json({ message: "Forbidden" });
+
+//     // ✅ collect wasabi keys
+//     const keys = [];
+//     for (const m of post.medias || []) {
+//       if (m?.provider === "wasabi" && m?.key) keys.push(m.key);
+//       if (m?.thumbnailProvider === "wasabi" && m?.thumbnailKey)
+//         keys.push(m.thumbnailKey);
+//     }
+
+//     // ✅ soft delete first
+//     await Post.updateOne({ _id: postId }, { $set: { isDeleted: true } });
+
+//     // ✅ then try to delete media (best-effort)
+//     let mediaDeleted = 0;
+//     if (keys.length) {
+//       try {
+//         const out = await deleteManyFromWasabi(keys);
+//         mediaDeleted = out.deleted || 0;
+//       } catch (err) {
+//         // fail হলেও post delete থাকবে, তুমি চাইলে log/save করতে পারো
+//         console.log("Wasabi delete failed:", err?.message || err);
+//       }
+//     }
+
+//     return res.json({ success: true, mediaDeleted });
+//   } catch (e) {
+//     return res
+//       .status(500)
+//       .json({ message: e?.message || "Delete post failed" });
+//   }
+// };
+
+export const deletePost = async (req, res) => {
   try {
     const userId = req.user?._id;
     const postId = req.params.id;
 
     const post = await Post.findById(postId).lean();
-    if (!post || post.isDeleted)
+    if (!post || post.isDeleted) {
       return res.status(404).json({ message: "Post not found" });
+    }
 
-    if (!isOwner(post, userId))
+    if (String(post.author) !== String(userId)) {
       return res.status(403).json({ message: "Forbidden" });
+    }
 
-    // ✅ collect wasabi keys
+    // wasabi media keys collect
     const keys = [];
     for (const m of post.medias || []) {
       if (m?.provider === "wasabi" && m?.key) keys.push(m.key);
-      if (m?.thumbnailProvider === "wasabi" && m?.thumbnailKey)
+      if (m?.thumbnailProvider === "wasabi" && m?.thumbnailKey) {
         keys.push(m.thumbnailKey);
+      }
     }
 
-    // ✅ soft delete first
-    await Post.updateOne({ _id: postId }, { $set: { isDeleted: true } });
+    // 1) soft delete post
+    await Post.updateOne(
+      { _id: postId },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          likeCount: 0,
+          commentCount: 0,
+          shareCount: 0,
+          viewCount: 0,
+          saveCount: 0,
+        },
+      },
+    );
 
-    // ✅ then try to delete media (best-effort)
+    // 2) related docs delete
+    const [likeRes, shareRes, commentRes, viewRes, saveRes] = await Promise.all(
+      [
+        PostLike.deleteMany({ post: postId }),
+        PostShare.deleteMany({ post: postId }),
+        Comment.deleteMany({ postId: postId, targetType: "post" }),
+        VideoView.deleteMany({ post: postId }),
+        Save.deleteMany({ post: postId }),
+      ],
+    );
+
+    // 3) wasabi media delete (best effort)
     let mediaDeleted = 0;
     if (keys.length) {
       try {
         const out = await deleteManyFromWasabi(keys);
-        mediaDeleted = out.deleted || 0;
+        mediaDeleted = out?.deleted || 0;
       } catch (err) {
-        // fail হলেও post delete থাকবে, তুমি চাইলে log/save করতে পারো
         console.log("Wasabi delete failed:", err?.message || err);
       }
     }
 
-    return res.json({ success: true, mediaDeleted });
+    return res.json({
+      success: true,
+      message: "Post deleted successfully",
+      mediaDeleted,
+      deletedRelated: {
+        likes: likeRes.deletedCount || 0,
+        shares: shareRes.deletedCount || 0,
+        comments: commentRes.deletedCount || 0,
+        views: viewRes.deletedCount || 0,
+        saves: saveRes.deletedCount || 0,
+      },
+    });
   } catch (e) {
-    return res
-      .status(500)
-      .json({ message: e?.message || "Delete post failed" });
+    return res.status(500).json({
+      message: e?.message || "Delete post failed",
+    });
   }
 };
-
 
 export const getPostById = async (req, res) => {
   try {

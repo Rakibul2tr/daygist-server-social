@@ -15,5 +15,6 @@ const postShareSchema = new mongoose.Schema(
 // postShareSchema.index({ post: 1, user: 1 }, { unique: true }); // এক user ১ পোস্ট একবার share (চাইলে remove করো)
 postShareSchema.index({ post: 1, createdAt: -1 });
 
-export default mongoose.models.PostShare ||
+const PostShare= mongoose.models.PostShare ||
   mongoose.model("PostShare", postShareSchema);
+export default PostShare;

@@ -12,5 +12,6 @@ postLikeSchema.index({ post: 1, user: 1 }, { unique: true });
 postLikeSchema.index({ post: 1, createdAt: -1 });
 postLikeSchema.index({ user: 1, createdAt: -1 });
 
-export default mongoose.models.PostLike ||
+const PostLike= mongoose.models.PostLike ||
   mongoose.model("PostLike", postLikeSchema);
+export default PostLike;

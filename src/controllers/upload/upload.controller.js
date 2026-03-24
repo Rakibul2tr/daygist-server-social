@@ -1,4 +1,4 @@
-import uploadToWasabi, { getWasabiSignedUrl, uploadToWasabiStream } from "../../services/wbUpload.service.js";
+import uploadToWasabi, { deleteFromWasabi, getWasabiSignedUrl, uploadToWasabiStream } from "../../services/wbUpload.service.js";
 import fs from "fs";
 import { unlink } from "fs/promises";
 import { uploadBufferToCloudinary } from "../../services/cloudinary.service.js";
@@ -113,6 +113,33 @@ export const signedUrl = async (req, res) => {
   }
 };
 
+
+// delete media
+export const deleteUploadedFile = async (req, res) => {
+  try {
+    const key = String(req.body?.key || req.query?.key || "").trim();
+
+    if (!key) {
+      return res.status(400).json({
+        ok: false,
+        message: "key required",
+      });
+    }
+
+    await deleteFromWasabi(key);
+
+    return res.json({
+      ok: true,
+      message: "File deleted successfully",
+      key,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "delete failed",
+    });
+  }
+};
 
 
 // cloudinary upload api
