@@ -8,8 +8,6 @@
 // import Notification from "../../models/notification/notification.model.js";
 // import { sendPushToUser } from "../../services/push/sendPushToUser.js";
 
-
-
 // export const createComment = async (req, res) => {
 //   const session = await mongoose.startSession();
 //   try {
@@ -22,7 +20,6 @@
 //     const parentId = req.body?.parentId || null;
 //    const type=req?.body?.type
 //    console.log('comment req',req.body);
-   
 
 //     if (!text) {
 //       return res.status(400).json({ ok: false, message: "Comment required" });
@@ -56,7 +53,6 @@
 
 //         parentCommentOwnerId = parent?.author;
 //       }
-
 
 //       const c = await Comment.create(
 //         [
@@ -145,7 +141,6 @@
 //     session.endSession();
 //   }
 // };
-
 
 // // ✅ Get comments of a post (only top-level)
 // export const getPostComments = async (req, res) => {
@@ -366,7 +361,6 @@
 // //   }
 // // };
 
-
 // export const createGroupPostComment = async (req, res) => {
 //   const session = await mongoose.startSession();
 //   try {
@@ -511,7 +505,6 @@
 //   }
 // };
 
-
 // /** ------------------------------------------------------------------
 //  * ✅ Get comments of a GROUP POST (only top-level)
 //  * GET /group-posts/:postId/comments?limit=20&cursor=...
@@ -630,6 +623,7 @@
 //  * ✅ Soft delete GROUP POST comment (commentCount কমাই না — Facebook style)
 //  * DELETE /group-post-comments/:commentId
 //  * ------------------------------------------------------------------ */
+
 // export const deleteGroupPostComment = async (req, res) => {
 //   const session = await mongoose.startSession();
 //   try {
@@ -669,20 +663,20 @@
 //   }
 // };
 
-
 // controllers/comment/comment.controller.js
 import mongoose from "mongoose";
 import Post from "../../models/post/post.model.js";
 import GroupPost from "../../models/group/groupPost.model.js";
 import Comment from "../../models/comment/comment.model.js";
 import Notification from "../../models/notification/notification.model.js";
- import { sendPushToUser } from "../../services/push/sendPushToUser.js";// adjust path
+import { sendPushToUser } from "../../services/push/sendPushToUser.js"; // adjust path
 
 /* ------------------------- cursor helpers ------------------------- */
 const parseCursor = (raw) => {
   try {
     if (!raw) return null;
-    const obj = typeof raw === "string" ? JSON.parse(decodeURIComponent(raw)) : raw;
+    const obj =
+      typeof raw === "string" ? JSON.parse(decodeURIComponent(raw)) : raw;
     if (!obj?.createdAt || !obj?._id) return null;
     return obj;
   } catch {
@@ -710,8 +704,178 @@ const isValidType = (t) => t === "post" || t === "groupPost";
    Route: POST /comments/:postId
    Body: { type:"post"|"groupPost", text, parentId? }
 =================================================================== */
+// export const createComment = async (req, res) => {
+//   const session = await mongoose.startSession();
+//   try {
+//     const userId = req.user?._id;
+//     if (!userId) {
+//       return res.status(401).json({ ok: false, message: "Unauthorized" });
+//     }
+
+//     const postId = String(req.params?.postId || "");
+//     const text = String(req.body?.text || "").trim();
+//     const parentId = req.body?.parentId || null;
+//     const type = String(req.body?.type || "post"); // ✅ "post" | "groupPost"
+//     // console.log(postId,text,parentId,type);
+
+//     if (!mongoose.isValidObjectId(postId)) {
+//       return res.status(400).json({ ok: false, message: "Invalid post id" });
+//     }
+//     if (parentId && !mongoose.isValidObjectId(parentId)) {
+//       return res.status(400).json({ ok: false, message: "Invalid parent id" });
+//     }
+//     if (!isValidType(type)) {
+//       return res.status(400).json({ ok: false, message: "Invalid type" });
+//     }
+//     if (!text) {
+//       return res.status(400).json({ ok: false, message: "Comment required" });
+//     }
+
+//     // ✅ notify targets
+//     let postOwnerId = null;
+//     let parentCommentOwnerId = null;
+//     const isReply = !!parentId;
+
+//     let createdId = null;
+
+//     await session.withTransaction(async () => {
+//       // ✅ find target + increment commentCount
+//       if (type === "post") {
+//         const post = await Post.findOne({
+//           _id: postId,
+//           isDeleted: false,
+//         }).session(session);
+//         if (!post) throw new Error("Post not found");
+//         postOwnerId = post.author;
+
+//         await Post.updateOne(
+//           { _id: postId },
+//           { $inc: { commentCount: 1 } },
+//           { session },
+//         );
+//       } else {
+//         // console.log('post id',postId);
+
+//         const gp = await GroupPost.findOne({
+//           _id: postId,
+//           isDeleted: { $ne: true },
+//         }).session(session);
+//         // console.log('group post',gp);
+
+//         if (!gp) throw new Error("Post not found");
+//         postOwnerId = gp.authorId;
+
+//         await GroupPost.updateOne(
+//           { _id: postId },
+//           { $inc: { "counts.commentCount": 1 } },
+//           { session },
+//         );
+//       }
+
+//       // ✅ parent validation (must be same target)
+//       if (parentId) {
+//         const parent = await Comment.findOne({
+//           _id: parentId,
+//           targetType: type,
+//           postId,
+//           isDeleted: false,
+//         }).session(session);
+
+//         if (!parent) throw new Error("Parent comment not found");
+//         parentCommentOwnerId = parent.author;
+
+//         await Comment.updateOne(
+//           { _id: parentId },
+//           { $inc: { replyCount: 1 } },
+//           { session },
+//         );
+//       }
+
+//       const created = await Comment.create(
+//         [
+//           {
+//             targetType: type,
+//             postId,
+//             author: userId,
+//             parentId: parentId || null,
+//             text,
+//           },
+//         ],
+//         { session },
+//       );
+
+//       createdId = created?.[0]?._id;
+//     });
+
+//     const comment = await Comment.findById(createdId)
+//       .populate("author", "name username profilePic uid")
+//       .lean();
+
+//     // ✅ notify + push after commit
+//     const meName = req.user?.name || req.user?.username || "Someone";
+
+//     const payload =
+//       type === "post"
+//         ? { postId: String(postId), commentId: String(comment?._id) }
+//         : { groupPostId: String(postId), commentId: String(comment?._id) };
+
+//     if (isReply) {
+//       const to = parentCommentOwnerId ? String(parentCommentOwnerId) : null;
+//       if (to && to !== String(userId)) {
+//         const n = await Notification.create({
+//           toUserId: to,
+//           fromUserId: userId,
+//           type: type === "post" ? "comment_reply" : "group_comment_reply",
+//           title: "New reply",
+//           body: `${meName} replied to your comment`,
+//           data: payload,
+//         });
+
+//         sendPushToUser(to, {
+//           title: n.title,
+//           body: n.body,
+//           data: { notificationId: String(n._id), ...n.data },
+//         }).catch(() => {});
+//       }
+//     } else {
+//       const to = postOwnerId ? String(postOwnerId) : null;
+//       if (to && to !== String(userId)) {
+//         const n = await Notification.create({
+//           toUserId: to,
+//           fromUserId: userId,
+//           type: type === "post" ? "post_comment" : "group_post_comment",
+//           title: "New comment",
+//           body: `${meName} commented on your post`,
+//           data: payload,
+//         });
+
+//         sendPushToUser(to, {
+//           title: n.title,
+//           body: n.body,
+//           data: { notificationId: String(n._id), ...n.data },
+//         }).catch(() => {});
+//       }
+//     }
+
+//     return res.json({ ok: true, comment });
+//   } catch (e) {
+//     const msg = e?.message || "Comment failed";
+//     const status =
+//       msg === "Post not found"
+//         ? 404
+//         : msg === "Parent comment not found"
+//           ? 404
+//           : 500;
+//     return res.status(status).json({ ok: false, message: msg });
+//   } finally {
+//     session.endSession();
+//   }
+// };
+
+
 export const createComment = async (req, res) => {
   const session = await mongoose.startSession();
+
   try {
     const userId = req.user?._id;
     if (!userId) {
@@ -721,64 +885,69 @@ export const createComment = async (req, res) => {
     const postId = String(req.params?.postId || "");
     const text = String(req.body?.text || "").trim();
     const parentId = req.body?.parentId || null;
-    const type = String(req.body?.type || "post"); // ✅ "post" | "groupPost"
-    // console.log(postId,text,parentId,type);
-    
+    const type = String(req.body?.type || "post"); // "post" | "groupPost"
 
     if (!mongoose.isValidObjectId(postId)) {
       return res.status(400).json({ ok: false, message: "Invalid post id" });
     }
+
     if (parentId && !mongoose.isValidObjectId(parentId)) {
       return res.status(400).json({ ok: false, message: "Invalid parent id" });
     }
+
     if (!isValidType(type)) {
       return res.status(400).json({ ok: false, message: "Invalid type" });
     }
+
     if (!text) {
       return res.status(400).json({ ok: false, message: "Comment required" });
     }
 
-    // ✅ notify targets
     let postOwnerId = null;
     let parentCommentOwnerId = null;
     const isReply = !!parentId;
-
     let createdId = null;
 
     await session.withTransaction(async () => {
-      // ✅ find target + increment commentCount
+      // ✅ target post/group post check
       if (type === "post") {
-        const post = await Post.findOne({ _id: postId, isDeleted: false }).session(session);
+        const post = await Post.findOne({
+          _id: postId,
+          isDeleted: false,
+        }).session(session);
+
         if (!post) throw new Error("Post not found");
         postOwnerId = post.author;
 
-        await Post.updateOne(
-          { _id: postId },
-          { $inc: { commentCount: 1 } },
-          { session }
-        );
+        // ✅ only top-level comment increments post commentCount
+        if (!isReply) {
+          await Post.updateOne(
+            { _id: postId },
+            { $inc: { commentCount: 1 } },
+            { session },
+          );
+        }
       } else {
-        // console.log('post id',postId);
-        
         const gp = await GroupPost.findOne({
           _id: postId,
           isDeleted: { $ne: true },
         }).session(session);
-        // console.log('group post',gp);
-        
 
         if (!gp) throw new Error("Post not found");
         postOwnerId = gp.authorId;
 
-        await GroupPost.updateOne(
-          { _id: postId },
-          { $inc: { "counts.commentCount": 1 } },
-          { session }
-        );
+        // ✅ only top-level comment increments group post commentCount
+        if (!isReply) {
+          await GroupPost.updateOne(
+            { _id: postId },
+            { $inc: { "counts.commentCount": 1 } },
+            { session },
+          );
+        }
       }
 
-      // ✅ parent validation (must be same target)
-      if (parentId) {
+      // ✅ parent validation for reply
+      if (isReply) {
         const parent = await Comment.findOne({
           _id: parentId,
           targetType: type,
@@ -787,12 +956,13 @@ export const createComment = async (req, res) => {
         }).session(session);
 
         if (!parent) throw new Error("Parent comment not found");
+
         parentCommentOwnerId = parent.author;
 
         await Comment.updateOne(
           { _id: parentId },
           { $inc: { replyCount: 1 } },
-          { session }
+          { session },
         );
       }
 
@@ -806,7 +976,7 @@ export const createComment = async (req, res) => {
             text,
           },
         ],
-        { session }
+        { session },
       );
 
       createdId = created?.[0]?._id;
@@ -816,7 +986,6 @@ export const createComment = async (req, res) => {
       .populate("author", "name username profilePic uid")
       .lean();
 
-    // ✅ notify + push after commit
     const meName = req.user?.name || req.user?.username || "Someone";
 
     const payload =
@@ -826,6 +995,7 @@ export const createComment = async (req, res) => {
 
     if (isReply) {
       const to = parentCommentOwnerId ? String(parentCommentOwnerId) : null;
+
       if (to && to !== String(userId)) {
         const n = await Notification.create({
           toUserId: to,
@@ -844,6 +1014,7 @@ export const createComment = async (req, res) => {
       }
     } else {
       const to = postOwnerId ? String(postOwnerId) : null;
+
       if (to && to !== String(userId)) {
         const n = await Notification.create({
           toUserId: to,
@@ -865,14 +1036,19 @@ export const createComment = async (req, res) => {
     return res.json({ ok: true, comment });
   } catch (e) {
     const msg = e?.message || "Comment failed";
+
     const status =
-      msg === "Post not found" ? 404 : msg === "Parent comment not found" ? 404 : 500;
+      msg === "Post not found"
+        ? 404
+        : msg === "Parent comment not found"
+          ? 404
+          : 500;
+
     return res.status(status).json({ ok: false, message: msg });
   } finally {
     session.endSession();
   }
 };
-
 /* ===================================================================
    ✅ GET COMMENTS (top-level)
    Route: GET /comments/:postId?type=post|groupPost&limit=20&cursor=...
@@ -899,7 +1075,8 @@ export const getPostComments = async (req, res) => {
         ? await Post.exists({ _id: postId, isDeleted: false })
         : await GroupPost.exists({ _id: postId, isDeleted: { $ne: true } });
 
-    if (!exists) return res.status(404).json({ ok: false, message: "Post not found" });
+    if (!exists)
+      return res.status(404).json({ ok: false, message: "Post not found" });
 
     const items = await Comment.find({
       targetType: type,
@@ -910,12 +1087,15 @@ export const getPostComments = async (req, res) => {
     })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
-      .populate("author", "name username profilePic uid")
+      .populate("author", "name username avatar uid")
       .lean();
 
     const nextCursor =
       items.length > 0
-        ? { createdAt: items[items.length - 1].createdAt, _id: items[items.length - 1]._id }
+        ? {
+            createdAt: items[items.length - 1].createdAt,
+            _id: items[items.length - 1]._id,
+          }
         : null;
 
     return res.json({ ok: true, items, nextCursor });
@@ -932,7 +1112,7 @@ export const getCommentReplies = async (req, res) => {
   try {
     const commentId = String(req.params?.commentId || "");
     // console.log('replay',commentId);
-    
+
     if (!mongoose.isValidObjectId(commentId)) {
       return res.status(400).json({ ok: false, message: "Invalid comment id" });
     }
@@ -941,10 +1121,13 @@ export const getCommentReplies = async (req, res) => {
     const cursor = parseCursor(req.query.cursor);
     const cursorFilter = buildCursorFilter(cursor);
 
-    const parent = await Comment.findById(commentId).select("postId targetType").lean();
+    const parent = await Comment.findById(commentId)
+      .select("postId targetType")
+      .lean();
     // console.log('parent',parent);
-    
-    if (!parent) return res.status(404).json({ ok: false, message: "Comment not found" });
+
+    if (!parent)
+      return res.status(404).json({ ok: false, message: "Comment not found" });
 
     const items = await Comment.find({
       targetType: parent.targetType,
@@ -955,12 +1138,15 @@ export const getCommentReplies = async (req, res) => {
     })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
-      .populate("author", "name username profilePic uid")
+      .populate("author", "name username avatar uid")
       .lean();
 
     const nextCursor =
       items.length > 0
-        ? { createdAt: items[items.length - 1].createdAt, _id: items[items.length - 1]._id }
+        ? {
+            createdAt: items[items.length - 1].createdAt,
+            _id: items[items.length - 1]._id,
+          }
         : null;
 
     return res.json({ ok: true, items, nextCursor });
@@ -973,11 +1159,15 @@ export const getCommentReplies = async (req, res) => {
    ✅ DELETE COMMENT (soft delete)
    Route: DELETE /comments/:commentId
 =================================================================== */
+
 export const deleteComment = async (req, res) => {
   const session = await mongoose.startSession();
+
   try {
     const userId = req.user?._id;
-    if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
+    if (!userId) {
+      return res.status(401).json({ ok: false, message: "Unauthorized" });
+    }
 
     const commentId = String(req.params?.commentId || "");
     if (!mongoose.isValidObjectId(commentId)) {
@@ -990,19 +1180,53 @@ export const deleteComment = async (req, res) => {
 
       const isOwner = String(c.author) === String(userId);
       const isAdmin = String(req.user?.role || "").toUpperCase() === "ADMIN";
-      if (!isOwner && !isAdmin) throw new Error("Forbidden");
+
+      if (!isOwner && !isAdmin) {
+        throw new Error("Forbidden");
+      }
 
       if (c.isDeleted) return;
 
+      const isReply = !!c.parentId;
+
+      // ✅ 1) comment delete
       c.isDeleted = true;
       c.text = "[deleted]";
       await c.save({ session });
+
+      // ✅ 2) parent comment হলে post/group commentCount কমাও
+      if (!isReply) {
+        if (c.targetType === "post") {
+          await Post.updateOne(
+            { _id: c.postId },
+            { $inc: { commentCount: -1 } },
+            { session },
+          );
+        } else if (c.targetType === "groupPost") {
+          await GroupPost.updateOne(
+            { _id: c.postId },
+            { $inc: { "counts.commentCount": -1 } },
+            { session },
+          );
+        }
+      }
+
+      // ✅ 3) reply হলে parent replyCount কমাও
+      if (isReply) {
+        await Comment.updateOne(
+          { _id: c.parentId, replyCount: { $gt: 0 } },
+          { $inc: { replyCount: -1 } },
+          { session },
+        );
+      }
     });
 
     return res.json({ ok: true, message: "Deleted" });
   } catch (e) {
     const msg = e?.message || "Delete failed";
-    const status = msg === "Comment not found" ? 404 : msg === "Forbidden" ? 403 : 500;
+    const status =
+      msg === "Comment not found" ? 404 : msg === "Forbidden" ? 403 : 500;
+
     return res.status(status).json({ ok: false, message: msg });
   } finally {
     session.endSession();

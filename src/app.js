@@ -67,13 +67,15 @@ app.use("/report", reportPostRoutes);
 
 
 // admin
-app.use("/admin", adminPostRoutes);
 app.use("/admin", adminUserRoutes);
+app.use("/admin", adminPostRoutes);
+app.use("/admin", adminGroupRoutes);
+app.use("/admin/groups/post", adminGroupPostRoutes);
 app.use("/admin", adminMonetizationRoutes);
 app.use("/admin", adminStoryRoutes);
 app.use("/admin", adminWithdrawRoutes);
-app.use("/admin", adminGroupRoutes);
-app.use("/admin/groups/post", adminGroupPostRoutes);
+
+
 //admin ads route
 app.use("/admin",adminAdsRoutes)
 //admin wallet-settings

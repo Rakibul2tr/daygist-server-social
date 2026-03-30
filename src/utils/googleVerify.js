@@ -30,6 +30,7 @@ const client = new OAuth2Client();
 const googleAudiences = [
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_ID1,
+  process.env.GOOGLE_CLIENT_ID2,
 ].filter(Boolean);
 
 export async function verifyGoogleToken(idToken) {

@@ -6,6 +6,7 @@ import VideoView from "../../models/post/videoView.model.js";
 import { getHomeFeed } from "../../services/feed/feed.service.js";
 import { deleteManyFromWasabi, uploadToWasabiFilePath } from "../../services/wbUpload.service.js";
 import PostLike from "../../models/post/postLike.model.js";
+import Follow from "../../models/follow/follow.model.js";
 
 const isOwner = (post, userId) => String(post.author) === String(userId);
 const toStr = (v) => (typeof v === "string" ? v.trim() : "");
@@ -50,7 +51,7 @@ export const createPost = async (req, res) => {
     if (!postType)
       return res.status(400).json({ message: "Invalid post type" });
 
-    const safePrivacy = ["public", "friends", "only_me"].includes(privacy)
+    const safePrivacy = ["public", "followers", "only_me"].includes(privacy)
       ? privacy
       : "public";
 
@@ -268,50 +269,6 @@ export const updatePost = async (req, res) => {
   }
 };
 
-// export const deletePost = async (req, res) => {
-//   console.log('req',req.params);
-  
-//   try {
-//     const userId = req.user?._id;
-//     const postId = req.params.id;
-
-//     const post = await Post.findById(postId).lean();
-//     if (!post || post.isDeleted)
-//       return res.status(404).json({ message: "Post not found" });
-
-//     if (!isOwner(post, userId))
-//       return res.status(403).json({ message: "Forbidden" });
-
-//     // ✅ collect wasabi keys
-//     const keys = [];
-//     for (const m of post.medias || []) {
-//       if (m?.provider === "wasabi" && m?.key) keys.push(m.key);
-//       if (m?.thumbnailProvider === "wasabi" && m?.thumbnailKey)
-//         keys.push(m.thumbnailKey);
-//     }
-
-//     // ✅ soft delete first
-//     await Post.updateOne({ _id: postId }, { $set: { isDeleted: true } });
-
-//     // ✅ then try to delete media (best-effort)
-//     let mediaDeleted = 0;
-//     if (keys.length) {
-//       try {
-//         const out = await deleteManyFromWasabi(keys);
-//         mediaDeleted = out.deleted || 0;
-//       } catch (err) {
-//         // fail হলেও post delete থাকবে, তুমি চাইলে log/save করতে পারো
-//         console.log("Wasabi delete failed:", err?.message || err);
-//       }
-//     }
-
-//     return res.json({ success: true, mediaDeleted });
-//   } catch (e) {
-//     return res
-//       .status(500)
-//       .json({ message: e?.message || "Delete post failed" });
-//   }
-// };
 
 export const deletePost = async (req, res) => {
   try {
@@ -393,28 +350,77 @@ export const deletePost = async (req, res) => {
   }
 };
 
+// export const getPostById = async (req, res) => {
+//   try {
+//     const postId = req.params.id;
+
+//     const post = await Post.findOne({ _id: postId, isDeleted: false }).populate(
+//       "author",
+//       "name username avatar"
+//     );
+
+//     if (!post) return res.status(404).json({ message: "Post not found" });
+
+//     // share link (frontend handle করবে)
+//     const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/post/${
+//       post._id
+//     }`;
+
+//     return res.json({ success: true, post, shareLink });
+//   } catch (e) {
+//     return res.status(500).json({ message: e?.message || "Get post failed" });
+//   }
+// };
+
 export const getPostById = async (req, res) => {
   try {
     const postId = req.params.id;
+    const me = req.user?._id || null; 
 
-    const post = await Post.findOne({ _id: postId, isDeleted: false }).populate(
-      "author",
-      "name username avatar"
-    );
+    const post = await Post.findOne({ _id: postId, isDeleted: false })
+      .populate("author", "name username avatar")
+      .lean();
 
-    if (!post) return res.status(404).json({ message: "Post not found" });
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+    let isLiked = false;
+    let isShared = false;
+    let isFollowingAuthor = false;
 
-    // share link (frontend handle করবে)
-    const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/post/${
-      post._id
-    }`;
+    
+    if (me) {
+      const [likedRow, sharedRow, followingRow] = await Promise.all([
+        PostLike.exists({ user: me, post: postId }),
+        PostShare.exists({ user: me, post: postId }),
+        Follow.exists({ follower: me, following: post.author?._id }),
+      ]);
+      console.log('liked row',likedRow);
+      
 
-    return res.json({ success: true, post, shareLink });
+      isLiked = !!likedRow;
+      isShared = !!sharedRow;
+      isFollowingAuthor = !!followingRow;
+    }
+
+    const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/post/${post._id}`;
+
+    return res.json({
+      success: true,
+      post: {
+        ...post,
+        isLiked,
+        isShared,
+        isFollowingAuthor,
+      },
+      shareLink,
+    });
   } catch (e) {
-    return res.status(500).json({ message: e?.message || "Get post failed" });
+    return res.status(500).json({
+      message: e?.message || "Get post failed",
+    });
   }
 };
-
 
 export const getFeed = async (req, res) => {
   try {

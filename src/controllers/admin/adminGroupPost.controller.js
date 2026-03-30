@@ -7,8 +7,7 @@ import {
 } from "../../helpers/groupPostHelper.js";
 
 import  GroupPost  from "../../models/group/groupPost.model.js";
-import GroupMember from "../../models/group/groupMember.model.js";
-import Group from "../../models/group/group.model.js";
+
 
 /* ============================================================================
   ADMIN GROUP POSTS CONTROLLER

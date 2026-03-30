@@ -304,7 +304,8 @@ export const getSingleGroupPost = async (req, res) => {
       groupId,
       isDeleted: { $ne: true },
     })
-      .populate("authorId", "name avatarUrl")
+      .populate("authorId", "name avatar")
+      .populate("groupId", "name coverUrl privacy")
       .lean();
 
     if (!post) return res.status(404).json({ message: "Post not found" });

@@ -23,7 +23,7 @@ router.get("/feed", authGuard, getFeed);
 router.post("/create", authGuard, createPost);
 router.patch("/:id", authGuard, updatePost);
 router.delete("/:id/delete", authGuard, deletePost);
-router.get("/:id", getPostById);
+router.get("/:id",authGuard, getPostById);
 
 // save/bookmark
 router.post("/:id/save", authGuard, savePost);

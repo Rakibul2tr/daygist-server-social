@@ -65,62 +65,6 @@ export const unfollowUser = async (req, res) => {
   }
 };
 
-// export const getFollowers = async (req, res) => {
-//   try {
-//     const userId = req.params.userId;
-//     if (!mongoose.isValidObjectId(userId))
-//       return res.status(400).json({ message: "Invalid userId" });
-
-//     const page = Math.max(Number(req.query.page) || 1, 1);
-//     const limit = Math.min(Number(req.query.limit) || 20, 50);
-//     const skip = (page - 1) * limit;
-
-//     const rows = await Follow.find({ following: userId })
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(limit)
-//       .populate("follower", "name username avatar")
-//       .lean();
-
-//     const users = rows.map((x) => x.follower).filter(Boolean);
-//     return res.json({ success: true, page, limit, users });
-//   } catch (e) {
-//     return res
-//       .status(500)
-//       .json({ message: e?.message || "Fetch followers failed" });
-//   }
-// };
-
-
-
-// export const getFollowing = async (req, res) => {
-//   try {
-//     const userId = req.params.userId;
-//     if (!mongoose.isValidObjectId(userId))
-//       return res.status(400).json({ message: "Invalid userId" });
-
-//     const page = Math.max(Number(req.query.page) || 1, 1);
-//     const limit = Math.min(Number(req.query.limit) || 20, 50);
-//     const skip = (page - 1) * limit;
-
-//     const rows = await Follow.find({ follower: userId })
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(limit)
-//       .populate("following", "name username avatar")
-//       .lean();
-
-//     const users = rows.map((x) => x.following).filter(Boolean);
-//     return res.json({ success: true, page, limit, users });
-//   } catch (e) {
-//     return res
-//       .status(500)
-//       .json({ message: e?.message || "Fetch following failed" });
-//   }
-// };
-
-// Optional: status check (আমি তাকে follow করি কিনা)
-
 /**
  * ✅ GET /users/:id/followers
  * followers = যারা :id user কে follow করে
