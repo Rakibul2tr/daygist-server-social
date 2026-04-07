@@ -41,8 +41,8 @@ const storySchema = new mongoose.Schema(
 
     privacy: {
       type: String,
-      enum: ["public", "friends", "only_me"],
-      default: "public",
+      enum: ["followers", "friends", "only_me"],
+      default: "followers",
       index: true,
     },
 
@@ -52,6 +52,7 @@ const storySchema = new mongoose.Schema(
     // ✅ text story
     text: { type: String, trim: true, maxlength: 3000, default: "" },
     backgroundUrl: { type: String, default: "" },
+    webLink: { type: String, default: "" },
     textStyle: { type: storyTextStyleSchema, default: null },
 
     // soft delete (optional)
@@ -60,7 +61,7 @@ const storySchema = new mongoose.Schema(
     // ✅ TTL
     expiresAt: { type: Date, required: true, index: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // ✅ TTL index: expiresAt time এ doc auto delete

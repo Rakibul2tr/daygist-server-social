@@ -6,6 +6,10 @@ import { generateToken } from "../../utils/jwt.js";
 const norm = (v) => (v == null ? "" : String(v).trim());
 const up = (v) => norm(v).toUpperCase();
 const ALLOWED_ROLES = ["USER", "ADMIN", "SELLER", "MODERATOR", "SUPPER ADMIN"];
+const generateUsername = (email) => {
+  const base = String(email || "admin").split("@")[0];
+  return `${base}_${Math.floor(1000 + Math.random() * 9000)}`;
+};
 
 // login or signup
 export const googleAdminLoginOrCreate = async (req, res) => {
@@ -49,7 +53,7 @@ export const googleAdminLoginOrCreate = async (req, res) => {
           key: null,
           provider: "google",
         },
-        username: name,
+        username:generateUsername(email),
         role: "ADMIN", // or "SUPPER ADMIN"
         profileCompleted: true,
         isNewUser: false,

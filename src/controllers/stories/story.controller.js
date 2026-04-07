@@ -58,15 +58,15 @@ export const createStory = async (req, res) => {
     const me = req.user?._id;
     if (!me) return res.status(401).json({ message: "Unauthorized" });
 
-    const { type, privacy, media, text, backgroundUrl, textStyle } =
+    const { type, privacy, media, text, backgroundUrl, textStyle, webLink } =
       req.body || {};
     const storyType = ["image", "video", "text"].includes(type) ? type : null;
     if (!storyType)
       return res.status(400).json({ message: "Invalid story type" });
 
-    const safePrivacy = ["public", "friends", "only_me"].includes(privacy)
+    const safePrivacy = ["followers", "friends", "only_me"].includes(privacy)
       ? privacy
-      : "public";
+      : "followers";
 
     const expiresAt = new Date(Date.now() + DAY_MS);
 
@@ -80,6 +80,7 @@ export const createStory = async (req, res) => {
       text: "",
       backgroundUrl: "",
       textStyle: null,
+      webLink: webLink,
     };
 
     if (storyType === "text") {
@@ -89,6 +90,7 @@ export const createStory = async (req, res) => {
       doc.text = cleanText;
       doc.backgroundUrl = isValidUrl(backgroundUrl) ? backgroundUrl : "";
       doc.textStyle = textStyle || null;
+      doc.webLink = webLink || null;
     } else {
       const url = toStr(media?.url);
       if (!isValidUrl(url))
@@ -154,7 +156,7 @@ export const getUserStories = async (req, res) => {
         ? {}
         : {
             $or: [
-              { privacy: "public" },
+              { privacy: "followers" },
               {
                 privacy: "friends",
                 userId: {

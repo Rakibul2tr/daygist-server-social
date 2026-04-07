@@ -24,6 +24,7 @@ export const createPost = async (req, res) => {
       // unified text/caption
       text,
       caption,
+      feeling,
 
       // text extras
       backgroundUrl,
@@ -59,7 +60,7 @@ export const createPost = async (req, res) => {
     const isValidUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
 
     // ✅ unify caption/text into one "text"
-    const cleanText = toStr(postType === "text" ? text : caption || text);
+    const cleanText = toStr(postType === "text" ? text : caption);
 
     // ✅ sanitize textStyle (align enum)
     const safeTextStyle =
@@ -200,7 +201,8 @@ export const createPost = async (req, res) => {
       type: postType,
       privacy: safePrivacy,
 
-      text: cleanText || "",
+      text:  cleanText || "",
+      feeling: toStr(feeling) || null,
 
       // text extras
       backgroundUrl:
@@ -254,6 +256,9 @@ export const updatePost = async (req, res) => {
     if (!isOwner(post, userId))
       return res.status(403).json({ message: "Forbidden" });
 
+    if(post.type == "text"){
+      post.text = (text || "").trim();
+    }
     post.text = (text || "").trim();
     await post.save();
 
@@ -395,7 +400,7 @@ export const getPostById = async (req, res) => {
         PostShare.exists({ user: me, post: postId }),
         Follow.exists({ follower: me, following: post.author?._id }),
       ]);
-      console.log('liked row',likedRow);
+      // console.log('liked row',likedRow);
       
 
       isLiked = !!likedRow;
@@ -435,8 +440,12 @@ export const getFeed = async (req, res) => {
         cursor = null;
       }
     }
+    // console.log('limit',limit,cursor);
+    
 
     const data = await getHomeFeed({ userId, limit, cursor });
+    // console.log('data',data.items.length);
+    
     
     return res.json({ success: true, ...data });
   } catch (e) {
@@ -525,79 +534,169 @@ export const getSavedPosts = async (req, res) => {
 
 
 // long video crate post 
+// export const createLongVideoPost = async (req, res) => {
+//   try {
+//     const userId = req.user?._id;
+//     if (!userId)
+//       return res.status(401).json({ success: false, message: "Unauthorized" });
+
+//     // ✅ text fields
+//     const title = String(req.body?.title || "").trim();
+//     const description = String(req.body?.description || "").trim();
+//     const subCategory = String(req.body?.subCategory || "other").trim();
+
+//     // ✅ files
+//     const videoFile = req.files?.video?.[0];
+//     const thumbFile = req.files?.thumbnail?.[0];
+
+//     if (!videoFile) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "video required" });
+//     }
+
+//     // ✅ upload to wasabi (stream)
+//     const upVideo = await uploadToWasabiFilePath({
+//       filePath: videoFile.path,
+//       mimetype: videoFile.mimetype,
+//       folder: "long-videos",
+//     });
+
+//     let upThumb = null;
+//     if (thumbFile?.path) {
+//       upThumb = await uploadToWasabiFilePath({
+//         filePath: thumbFile.path,
+//         mimetype: thumbFile.mimetype,
+//         folder: "video-thumbs",
+//       });
+//     }
+
+//     // ✅ cleanup tmp
+//     safeUnlink(videoFile.path);
+//     if (thumbFile?.path) safeUnlink(thumbFile.path);
+
+//     // ✅ save post
+//     const doc = await Post.create({
+//       author: userId,
+//       type: "video",
+//       privacy: "public",
+//       text: title||"",
+//       description:description || "",
+//       category: "general", // ✅ fixed
+//       subCategory: subCategory || "other",
+//       videoMode: "normal",
+
+//       medias: [
+//         {
+//           type: "video",
+//           url: upVideo.url,
+//           key: upVideo.key,
+//           provider: "wasabi",
+//           thumbnailUrl: upThumb?.url || null,
+//           // thumbnailKey: upThumb?.key (schema থাকলে)
+//         },
+//       ],
+//     });
+
+//     return res.json({ success: true, post: doc });
+//   } catch (e) {
+//     console.log("createLongVideoPost error:", e);
+//     return res
+//       .status(500)
+//       .json({ success: false, message: e?.message || "Upload failed" });
+//   }
+// };
 export const createLongVideoPost = async (req, res) => {
   try {
     const userId = req.user?._id;
-    if (!userId)
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
 
     // ✅ text fields
     const title = String(req.body?.title || "").trim();
     const description = String(req.body?.description || "").trim();
     const subCategory = String(req.body?.subCategory || "other").trim();
 
-    // ✅ files
-    const videoFile = req.files?.video?.[0];
-    const thumbFile = req.files?.thumbnail?.[0];
+    // ✅ media from frontend
+    const video = req.body?.video;
+    const thumbnail = req.body?.thumbnail;
 
-    if (!videoFile) {
-      return res
-        .status(400)
-        .json({ success: false, message: "video required" });
-    }
-
-    // ✅ upload to wasabi (stream)
-    const upVideo = await uploadToWasabiFilePath({
-      filePath: videoFile.path,
-      mimetype: videoFile.mimetype,
-      folder: "long-videos",
-    });
-
-    let upThumb = null;
-    if (thumbFile?.path) {
-      upThumb = await uploadToWasabiFilePath({
-        filePath: thumbFile.path,
-        mimetype: thumbFile.mimetype,
-        folder: "video-thumbs",
+    if (!video?.url || !video?.key) {
+      return res.status(400).json({
+        success: false,
+        message: "Video data required",
       });
     }
 
-    // ✅ cleanup tmp
-    safeUnlink(videoFile.path);
-    if (thumbFile?.path) safeUnlink(thumbFile.path);
-
-    // ✅ save post
+    // ✅ save post (NO upload)
     const doc = await Post.create({
       author: userId,
       type: "video",
       privacy: "public",
-      text: title||"",
-      description:description || "",
-      category: "general", // ✅ fixed
+      text: title,
+      description,
+      category: "general",
       subCategory: subCategory || "other",
       videoMode: "normal",
 
       medias: [
         {
           type: "video",
-          url: upVideo.url,
-          key: upVideo.key,
-          provider: "wasabi",
-          thumbnailUrl: upThumb?.url || null,
-          // thumbnailKey: upThumb?.key (schema থাকলে)
+          url: video.url,
+          key: video.key,
+          provider: video.provider || "wasabi",
+          thumbnailUrl: thumbnail?.url || null,
+          thumbnailKey: thumbnail?.key || null,
         },
       ],
     });
 
-    return res.json({ success: true, post: doc });
+    return res.json({
+      success: true,
+      post: doc,
+    });
   } catch (e) {
     console.log("createLongVideoPost error:", e);
-    return res
-      .status(500)
-      .json({ success: false, message: e?.message || "Upload failed" });
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "Upload failed",
+    });
   }
 };
 
+// search videos
+export const searchVideos = async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+
+    if (!q) {
+      return res.json({ success: true, items: [] });
+    }
+
+    const items = await Post.find({
+      isDeleted: false,
+      type: "video",
+      category: "general", // ✅ reels avoid
+      $text: { $search: q }, // 🔥 powerful search
+      subCategory: { $exists: true },
+    })
+      .select({
+        score: { $meta: "textScore" },
+      })
+      .populate("author", "name avatar")
+      .sort({ score: { $meta: "textScore" } }) // 🔥 relevance অনুযায়ী sort
+      .limit(20);
+
+    res.json({ success: true, items });
+  } catch (e) {
+    console.log("searchVideos error:", e);
+    res.status(500).json({ success: false, message: "Search failed" });
+  }
+};
 function safeUnlink(p) {
   try {
     fs.unlinkSync(p);

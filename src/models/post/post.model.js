@@ -16,30 +16,23 @@ const mediaSchema = new mongoose.Schema(
       index: true,
     },
 
-    // ✅ Which storage/provider the file belongs to
-    // (optional so old posts won't break)
     provider: {
       type: String,
       enum: ["cloudinary", "wasabi", "s3", "local"],
-      default: "cloudinary",
+      default: "wasabi",
     },
 
-    // ✅ Cloudinary deletion needs publicId
-    // store this during upload response (recommended)
     publicId: { type: String, default: null },
-
-    // ✅ Wasabi/S3 deletion needs object key
     key: { type: String, default: null },
 
-    // ✅ For video: should be REMOTE url (not file:///)
     thumbnailUrl: { type: String, default: null },
+    thumbnailKey: { type: String, default: null }, // ✅ added
 
-    // optional meta
     width: { type: Number, default: null },
     height: { type: Number, default: null },
-    duration: { type: Number, default: null }, // seconds
+    duration: { type: Number, default: null },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const textStyleSchema = new mongoose.Schema(
@@ -86,6 +79,7 @@ const postSchema = new mongoose.Schema(
 
     // ✅ text post extras
     backgroundUrl: { type: String, default: null },
+    feeling: { type: String, default: null },
     textStyle: { type: textStyleSchema, default: null },
 
     // ✅ media posts
@@ -144,6 +138,12 @@ postSchema.index({ author: 1, createdAt: -1 });
 // filters
 postSchema.index({ author: 1, type: 1, createdAt: -1 });
 postSchema.index({ author: 1, category: 1, createdAt: -1 });
+postSchema.index({
+  text: "text",
+  description: "text",
+  category: "text",
+  subCategory: "text",
+});
 
 /* -------------------------------------------------------------------------- */
 
