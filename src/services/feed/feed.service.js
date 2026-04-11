@@ -369,6 +369,7 @@ import GroupMember from "../../models/group/groupMember.model.js";
 import GroupPost from "../../models/group/groupPost.model.js";
 import GroupPostShare from "../../models/group/groupPostShare.model.js";
 import GroupPostLike from "../../models/group/groupPostLike.model.js";
+import Save from "../../models/post/save.model.js";
 
 const toOID = (id) => new mongoose.Types.ObjectId(id);
 
@@ -534,30 +535,38 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
       .filter((x) => x.feedType === "groupPost")
       .map((p) => p._id);
 
-    const [likedRows, sharedRows, gLikedRows, gSharedRows] =
-      await Promise.all([
-        PostLike.find({ user: userId, post: { $in: postIds } })
-          .select("post")
-          .lean(),
+const [likedRows, sharedRows, gLikedRows, gSharedRows, savedRows] =
+  await Promise.all([
+    PostLike.find({ user: userId, post: { $in: postIds } })
+      .select("post")
+      .lean(),
 
-        PostShare.find({ user: userId, post: { $in: postIds } })
-          .select("post")
-          .lean(),
+    PostShare.find({ user: userId, post: { $in: postIds } })
+      .select("post")
+      .lean(),
 
-        GroupPostLike.find({
-          userId: userId,
-          postId: { $in: groupPostIds },
-        })
-          .select("postId")
-          .lean(),
+    GroupPostLike.find({
+      userId: userId,
+      postId: { $in: groupPostIds },
+    })
+      .select("postId")
+      .lean(),
 
-        GroupPostShare.find({
-          userId: userId,
-          postId: { $in: groupPostIds },
-        })
-          .select("postId")
-          .lean(),
-      ]);
+    GroupPostShare.find({
+      userId: userId,
+      postId: { $in: groupPostIds },
+    })
+      .select("postId")
+      .lean(),
+
+    // ✅ ONLY POST SAVE (correct)
+    Save.find({
+      user: userId,
+      $or: [{ post: { $in: postIds } }, { post: { $in: groupPostIds } }],
+    })
+      .select("targetId targetType")
+      .lean(),
+  ]);
 
     const likedSet = new Set(likedRows.map((r) => String(r.post)));
     const sharedSet = new Set(sharedRows.map((r) => String(r.post)));
@@ -565,15 +574,32 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
     const gLikedSet = new Set(gLikedRows.map((r) => String(r.postId)));
     const gSharedSet = new Set(gSharedRows.map((r) => String(r.postId)));
 
+    const savedPostSet = new Set(
+      savedRows
+        .filter((r) => r.targetType === "post")
+        .map((r) => String(r.targetId)),
+    );
+
+    const savedGroupSet = new Set(
+      savedRows
+        .filter((r) => r.targetType === "groupPost")
+        .map((r) => String(r.targetId)),
+    );
+
     for (const it of sliced) {
       const id = String(it._id);
 
       if (it.feedType === "post") {
         it.isLiked = likedSet.has(id);
         it.isShared = sharedSet.has(id);
+
+        // ✅ SAVE
+        it.isSave = savedPostSet.has(id);
       } else {
         it.isLiked = gLikedSet.has(id);
         it.isShared = gSharedSet.has(id);
+
+        it.isSave = savedGroupSet.has(id); 
       }
     }
   }

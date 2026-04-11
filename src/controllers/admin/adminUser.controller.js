@@ -197,7 +197,8 @@ export const adminGetUserById = async (req, res) => {
 export const adminUpdateUserControls = async (req, res) => {
   try {
     const id = req.params?.id;
-    const { role, isBlocked, isDeleted, forceLogout } = req.body || {};
+    const { role, isBlocked, isDeleted, forceLogout, accountStatus } =
+      req.body || {};
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -267,6 +268,28 @@ export const adminUpdateUserControls = async (req, res) => {
     // force logout
     if (forceLogout === true) {
       user.tokenVersion = (user.tokenVersion || 0) + 1;
+    }
+    // account status update
+    if (typeof accountStatus !== "undefined") {
+      const normalizedStatus = String(accountStatus).trim().toLowerCase();
+
+      const allowedStatus = [
+        "pending",
+        "verified",
+        "active",
+        "rejected",
+        "suspended",
+        "deleted",
+      ];
+
+      if (!allowedStatus.includes(normalizedStatus)) {
+        return res.status(400).json({
+          ok: false,
+          message: "Invalid status",
+        });
+      }
+
+      user.accountStatus = normalizedStatus;
     }
 
     await user.save();
@@ -338,193 +361,195 @@ export const adminOverview = async (req, res) => {
     });
   }
 };
-// ✅ Role change
-export const adminSetUserRole = async (req, res) => {
-  try {
-    const id = req.params?.id;
-    const role = up(req.body?.role);
 
-    // adjust roles list as your app needs
-    const ALLOWED = ["USER", "ADMIN", "MODERATOR"];
-    if (!ALLOWED.includes(role)) {
-      return res.status(400).json({ ok: false, message: "Invalid role" });
-    }
 
-    // prevent self-demote if you want
-    if (String(req.user?._id) === String(id) && role !== "ADMIN") {
-      return res
-        .status(400)
-        .json({ ok: false, message: "You cannot change your own role" });
-    }
+// // ✅ Role change
+// export const adminSetUserRole = async (req, res) => {
+//   try {
+//     const id = req.params?.id;
+//     const role = up(req.body?.role);
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $set: { role } },
-      { new: true },
-    )
-      .select("-password -googleId -__v")
-      .lean();
+//     // adjust roles list as your app needs
+//     const ALLOWED = ["USER", "ADMIN", "MODERATOR"];
+//     if (!ALLOWED.includes(role)) {
+//       return res.status(400).json({ ok: false, message: "Invalid role" });
+//     }
 
-    if (!user)
-      return res.status(404).json({ ok: false, message: "User not found" });
+//     // prevent self-demote if you want
+//     if (String(req.user?._id) === String(id) && role !== "ADMIN") {
+//       return res
+//         .status(400)
+//         .json({ ok: false, message: "You cannot change your own role" });
+//     }
 
-    return res.json({ ok: true, message: "Role updated", data: user });
-  } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, message: e?.message || "Role update failed" });
-  }
-};
+//     const user = await User.findByIdAndUpdate(
+//       id,
+//       { $set: { role } },
+//       { new: true },
+//     )
+//       .select("-password -googleId -__v")
+//       .lean();
 
-// ✅ Block / Unblock (requires User schema field: isBlocked)
-export const adminSetUserBlocked = async (req, res) => {
-  try {
-    const id = req.params?.id;
-    const blocked = Boolean(req.body?.blocked);
+//     if (!user)
+//       return res.status(404).json({ ok: false, message: "User not found" });
 
-    // prevent blocking self (optional)
-    if (String(req.user?._id) === String(id) && blocked) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "You cannot block yourself" });
-    }
+//     return res.json({ ok: true, message: "Role updated", data: user });
+//   } catch (e) {
+//     return res
+//       .status(500)
+//       .json({ ok: false, message: e?.message || "Role update failed" });
+//   }
+// };
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $set: { isBlocked: blocked } },
-      { new: true },
-    )
-      .select("-password -googleId -__v")
-      .lean();
+// // ✅ Block / Unblock (requires User schema field: isBlocked)
+// export const adminSetUserBlocked = async (req, res) => {
+//   try {
+//     const id = req.params?.id;
+//     const blocked = Boolean(req.body?.blocked);
 
-    if (!user)
-      return res.status(404).json({ ok: false, message: "User not found" });
+//     // prevent blocking self (optional)
+//     if (String(req.user?._id) === String(id) && blocked) {
+//       return res
+//         .status(400)
+//         .json({ ok: false, message: "You cannot block yourself" });
+//     }
 
-    return res.json({
-      ok: true,
-      message: blocked ? "User blocked" : "User unblocked",
-      data: user,
-    });
-  } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, message: e?._toggle || e?.message || "Failed" });
-  }
-};
+//     const user = await User.findByIdAndUpdate(
+//       id,
+//       { $set: { isBlocked: blocked } },
+//       { new: true },
+//     )
+//       .select("-password -googleId -__v")
+//       .lean();
 
-// ✅ Verify / Unverify (requires User schema field: isVerified)
-export const adminSetUserVerified = async (req, res) => {
-  try {
-    const id = req.params?.id;
-    const verified = Boolean(req.body?.verified);
+//     if (!user)
+//       return res.status(404).json({ ok: false, message: "User not found" });
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $set: { isVerified: verified } },
-      { new: true },
-    )
-      .select("-password -googleId -__v")
-      .lean();
+//     return res.json({
+//       ok: true,
+//       message: blocked ? "User blocked" : "User unblocked",
+//       data: user,
+//     });
+//   } catch (e) {
+//     return res
+//       .status(500)
+//       .json({ ok: false, message: e?._toggle || e?.message || "Failed" });
+//   }
+// };
 
-    if (!user)
-      return res.status(404).json({ ok: false, message: "User not found" });
+// // ✅ Verify / Unverify (requires User schema field: isVerified)
+// export const adminSetUserVerified = async (req, res) => {
+//   try {
+//     const id = req.params?.id;
+//     const verified = Boolean(req.body?.verified);
 
-    return res.json({
-      ok: true,
-      message: verified ? "User verified" : "User unverified",
-      data: user,
-    });
-  } catch (e) {
-    return res.status(500).json({ ok: false, message: e?.message || "Failed" });
-  }
-};
+//     const user = await User.findByIdAndUpdate(
+//       id,
+//       { $set: { isVerified: verified } },
+//       { new: true },
+//     )
+//       .select("-password -googleId -__v")
+//       .lean();
 
-// ✅ Soft delete user (requires field: isDeleted)
-export const adminDeleteUser = async (req, res) => {
-  try {
-    const id = req.params?.id;
+//     if (!user)
+//       return res.status(404).json({ ok: false, message: "User not found" });
 
-    if (String(req.user?._id) === String(id)) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "You cannot delete yourself" });
-    }
+//     return res.json({
+//       ok: true,
+//       message: verified ? "User verified" : "User unverified",
+//       data: user,
+//     });
+//   } catch (e) {
+//     return res.status(500).json({ ok: false, message: e?.message || "Failed" });
+//   }
+// };
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $set: { isDeleted: true } },
-      { new: true },
-    )
-      .select("-password -googleId -__v")
-      .lean();
+// // ✅ Soft delete user (requires field: isDeleted)
+// export const adminDeleteUser = async (req, res) => {
+//   try {
+//     const id = req.params?.id;
 
-    if (!user)
-      return res.status(404).json({ ok: false, message: "User not found" });
+//     if (String(req.user?._id) === String(id)) {
+//       return res
+//         .status(400)
+//         .json({ ok: false, message: "You cannot delete yourself" });
+//     }
 
-    return res.json({ ok: true, message: "User deleted", data: user });
-  } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, message: e?.message || "Delete failed" });
-  }
-};
+//     const user = await User.findByIdAndUpdate(
+//       id,
+//       { $set: { isDeleted: true } },
+//       { new: true },
+//     )
+//       .select("-password -googleId -__v")
+//       .lean();
 
-// ✅ Restore user (requires field: isDeleted)
-export const adminRestoreUser = async (req, res) => {
-  try {
-    const id = req.params?.id;
+//     if (!user)
+//       return res.status(404).json({ ok: false, message: "User not found" });
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $set: { isDeleted: false } },
-      { new: true },
-    )
-      .select("-password -googleId -__v")
-      .lean();
+//     return res.json({ ok: true, message: "User deleted", data: user });
+//   } catch (e) {
+//     return res
+//       .status(500)
+//       .json({ ok: false, message: e?.message || "Delete failed" });
+//   }
+// };
 
-    if (!user)
-      return res.status(404).json({ ok: false, message: "User not found" });
+// // ✅ Restore user (requires field: isDeleted)
+// export const adminRestoreUser = async (req, res) => {
+//   try {
+//     const id = req.params?.id;
 
-    return res.json({ ok: true, message: "User restored", data: user });
-  } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, message: e?.message || "Restore failed" });
-  }
-};
+//     const user = await User.findByIdAndUpdate(
+//       id,
+//       { $set: { isDeleted: false } },
+//       { new: true },
+//     )
+//       .select("-password -googleId -__v")
+//       .lean();
 
-// ✅ Force logout (requires field: tokenVersion)
-// In your JWT sign you should include tokenVersion; protect checks it.
-export const adminForceLogoutUser = async (req, res) => {
-  try {
-    const id = req.params?.id;
+//     if (!user)
+//       return res.status(404).json({ ok: false, message: "User not found" });
 
-    // prevent forcing yourself (optional)
-    if (String(req.user?._id) === String(id)) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "You cannot force logout yourself" });
-    }
+//     return res.json({ ok: true, message: "User restored", data: user });
+//   } catch (e) {
+//     return res
+//       .status(500)
+//       .json({ ok: false, message: e?.message || "Restore failed" });
+//   }
+// };
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $inc: { tokenVersion: 1 } },
-      { new: true },
-    )
-      .select("-password -googleId -__v")
-      .lean();
+// // ✅ Force logout (requires field: tokenVersion)
+// // In your JWT sign you should include tokenVersion; protect checks it.
+// export const adminForceLogoutUser = async (req, res) => {
+//   try {
+//     const id = req.params?.id;
 
-    if (!user)
-      return res.status(404).json({ ok: false, message: "User not found" });
+//     // prevent forcing yourself (optional)
+//     if (String(req.user?._id) === String(id)) {
+//       return res
+//         .status(400)
+//         .json({ ok: false, message: "You cannot force logout yourself" });
+//     }
 
-    return res.json({
-      ok: true,
-      message: "User logged out (forced)",
-      data: user,
-    });
-  } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, message: e?.message || "Force logout failed" });
-  }
-};
+//     const user = await User.findByIdAndUpdate(
+//       id,
+//       { $inc: { tokenVersion: 1 } },
+//       { new: true },
+//     )
+//       .select("-password -googleId -__v")
+//       .lean();
+
+//     if (!user)
+//       return res.status(404).json({ ok: false, message: "User not found" });
+
+//     return res.json({
+//       ok: true,
+//       message: "User logged out (forced)",
+//       data: user,
+//     });
+//   } catch (e) {
+//     return res
+//       .status(500)
+//       .json({ ok: false, message: e?.message || "Force logout failed" });
+//   }
+// };

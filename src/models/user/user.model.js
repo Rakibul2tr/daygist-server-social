@@ -82,6 +82,20 @@ const userSchema = new mongoose.Schema(
       default: "USER",
     },
 
+    accountStatus: {
+      type: String,
+      enum: [
+        "active",
+        "verified",
+        "pending",
+        "rejected",
+        "suspended",
+        "deleted",
+      ],
+      default: "pending",
+      index: true,
+    },
+
     profileCompleted: { type: Boolean, default: false },
     isBlocked: { type: Boolean, default: false },
     blockedAt: { type: Date, default: null },

@@ -103,7 +103,7 @@ export const getPostLikes = async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const skip = (page - 1) * limit;
 
-    const rows = await PostLike.find({ post: postId })
+    const rows = await GroupPostLike.find({ post: postId })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

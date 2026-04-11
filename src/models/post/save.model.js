@@ -8,18 +8,26 @@ const saveSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    post: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Post",
+
+    targetType: {
+      type: String,
+      enum: ["post", "groupPost"],
       required: true,
       index: true,
     },
+
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      index: true,
+      refPath: "targetType", // 🔥 dynamic ref
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-// same user cannot save same post twice
-saveSchema.index({ user: 1, post: 1 }, { unique: true });
+// ✅ unique per user + target
+saveSchema.index({ user: 1, targetId: 1, targetType: 1 }, { unique: true });
 
 const Save = mongoose.models.Save || mongoose.model("Save", saveSchema);
 export default Save;

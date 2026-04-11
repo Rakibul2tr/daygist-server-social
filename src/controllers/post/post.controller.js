@@ -7,6 +7,7 @@ import { getHomeFeed } from "../../services/feed/feed.service.js";
 import { deleteManyFromWasabi, uploadToWasabiFilePath } from "../../services/wbUpload.service.js";
 import PostLike from "../../models/post/postLike.model.js";
 import Follow from "../../models/follow/follow.model.js";
+import GroupPost from "../../models/group/groupPost.model.js";
 
 const isOwner = (post, userId) => String(post.author) === String(userId);
 const toStr = (v) => (typeof v === "string" ? v.trim() : "");
@@ -459,30 +460,51 @@ export const savePost = async (req, res) => {
     const userId = req.user?._id;
     const postId = req.params.id;
 
-    const post = await Post.findOne({ _id: postId, isDeleted: false });
-    if (!post) return res.status(404).json({ message: "Post not found" });
+    const targetType =
+      req.body?.targetType === "groupPost" ? "groupPost" : "post";
 
-    // ✅ upsert (only insert once)
+    const Model = targetType === "post" ? Post : GroupPost;
+
+    const post = await Model.findOne({ _id: postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Not found" });
+
     const r = await Save.updateOne(
-      { user: userId, post: postId },
-      { $setOnInsert: { user: userId, post: postId, createdAt: new Date() } },
-      { upsert: true }
+      {
+        user: userId,
+        targetId: postId,
+        targetType,
+      },
+      {
+        $setOnInsert: {
+          user: userId,
+          targetId: postId,
+          targetType,
+        },
+      },
+      { upsert: true },
     );
 
-    // ✅ only increment when newly inserted
     const inserted = r?.upsertedCount === 1 || !!r?.upsertedId;
 
     if (inserted) {
-      await Post.updateOne({ _id: postId }, { $inc: { saveCount: 1 } });
-      return res.json({ success: true, source: true, message: "Post saved successful" });
-    } else {
-      // already saved আগে থেকেই
+      if (targetType === "post") {
+        await Post.updateOne({ _id: postId }, { $inc: { saveCount: 1 } });
+      } else {
+        await GroupPost.updateOne({ _id: postId }, { $inc: { saveCount: 1 } });
+      }
+
       return res.json({
         success: true,
-        source: false,
-        message: "Already saved",
+        saved: true,
+        message: "Saved successful",
       });
     }
+
+    return res.json({
+      success: true,
+      saved: false,
+      message: "Already saved",
+    });
   } catch (e) {
     return res.status(500).json({ message: e?.message || "Save failed" });
   }
@@ -494,9 +516,21 @@ export const unsavePost = async (req, res) => {
     const userId = req.user?._id;
     const postId = req.params.id;
 
-    const deleted = await Save.deleteOne({ user: userId, post: postId });
+    const targetType =
+      req.body?.targetType === "groupPost" ? "groupPost" : "post";
+
+    const deleted = await Save.deleteOne({
+      user: userId,
+      targetId: postId,
+      targetType,
+    });
+
     if (deleted.deletedCount) {
-      await Post.updateOne({ _id: postId }, { $inc: { saveCount: -1 } });
+      if (targetType === "post") {
+        await Post.updateOne({ _id: postId }, { $inc: { saveCount: -1 } });
+      } else {
+        await GroupPost.updateOne({ _id: postId }, { $inc: { saveCount: -1 } });
+      }
     }
 
     return res.json({ success: true });

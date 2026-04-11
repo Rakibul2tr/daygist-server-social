@@ -260,7 +260,8 @@ fetch(`http://localhost:5000/admin/users/${userId}/update-controls`, {
     role: "SELLER",
     isBlocked: false,
     isDeleted: false,
-    forceLogout: false
+    forceLogout: false,
+    accountStatus:"verified" //"active","verified", "pending", "rejected",  "suspended", "deleted"
   })
 });
 ```

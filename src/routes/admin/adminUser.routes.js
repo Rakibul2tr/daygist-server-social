@@ -6,12 +6,7 @@ import { isAdmin } from "../../middleware/isAdminMiddleware.js";
 import {
   adminGetAllUsers,
   adminGetUserById,
-  adminSetUserRole,
-  adminSetUserBlocked,
-  adminSetUserVerified,
-  adminDeleteUser,
-  adminRestoreUser,
-  adminForceLogoutUser,
+  
   googleAdminLoginOrCreate,
   adminUpdateUserControls,
   adminOverview,
@@ -36,19 +31,19 @@ router.patch(
 
 router.get("/overview-info", authGuard, isAdmin, adminOverview);
 // role
-router.patch("/users/:id/role", authGuard, isAdmin, adminSetUserRole);
+// router.patch("/users/:id/role", authGuard, isAdmin, adminSetUserRole);
 
-// block / unblock
-router.patch("/users/:id/block", authGuard, isAdmin, adminSetUserBlocked);
+// // block / unblock
+// router.patch("/users/:id/block", authGuard, isAdmin, adminSetUserBlocked);
 
-// verify
-router.patch("/users/:id/verify", authGuard, isAdmin, adminSetUserVerified);
+// // verify
+// router.patch("/users/:id/verify", authGuard, isAdmin, adminSetUserVerified);
 
-// delete/restore
-router.delete("/users/:id", authGuard, isAdmin, adminDeleteUser);
-router.patch("/users/:id/restore", authGuard, isAdmin, adminRestoreUser);
+// // delete/restore
+// router.delete("/users/:id", authGuard, isAdmin, adminDeleteUser);
+// router.patch("/users/:id/restore", authGuard, isAdmin, adminRestoreUser);
 
-// force logout
-router.patch("/users/:id/force-logout", authGuard, isAdmin, adminForceLogoutUser);
+// // force logout
+// router.patch("/users/:id/force-logout", authGuard, isAdmin, adminForceLogoutUser);
 
 export default router;

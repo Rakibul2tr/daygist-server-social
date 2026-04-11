@@ -456,6 +456,7 @@ fetch(`http://localhost:5000/posts/${postId}/save`, {
   headers: {
     Authorization: `Bearer ${token}`
   }
+  body:targetType // "groupPost" | "post"
 });
 ```
 
@@ -493,6 +494,7 @@ fetch(`http://localhost:5000/posts/${postId}/save`, {
   headers: {
     Authorization: `Bearer ${token}`
   }
+  body:targetType // "groupPost" | "post"
 });
 ```
 
@@ -868,4 +870,39 @@ carousel
 ```txt
 post
 groupPost
+```
+
+
+### JavaScript fetch=======report api
+```js
+const cursor = encodeURIComponent(JSON.stringify({
+  createdAt: "2026-03-20T10:00:00.000Z",
+  _id: "661111111111111111111111"
+}));
+
+fetch(`http://localhost:5000/report/posts/${postId}`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`
+  }
+  body: JSON.stringify({
+      reason: "spam",
+      details?: "Fake content"
+    })
+});
+```
+### JavaScript fetch ==== get own report
+```js
+const cursor = encodeURIComponent(JSON.stringify({
+  createdAt: "2026-03-20T10:00:00.000Z",
+  _id: "661111111111111111111111"
+}));
+
+fetch(`http://localhost:5000/report/get/me`, {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${token}`
+  }
+  
+});
 ```

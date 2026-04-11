@@ -61,7 +61,7 @@ export const getPostShares = async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const skip = (page - 1) * limit;
 
-    const rows = await PostShare.find({ post: postId })
+    const rows = await GroupPostShare.find({ post: postId })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
