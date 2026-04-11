@@ -53,10 +53,11 @@ export const googleAdminLoginOrCreate = async (req, res) => {
           key: null,
           provider: "google",
         },
-        username:generateUsername(email),
+        username: generateUsername(email),
         role: "ADMIN", // or "SUPPER ADMIN"
         profileCompleted: true,
         isNewUser: false,
+        accountStatus: "active",
       });
     } else {
       // ✅ if already exists, update googleId if empty
@@ -79,6 +80,7 @@ export const googleAdminLoginOrCreate = async (req, res) => {
 
       // ✅ force role as ADMIN if needed
       user.role = user.role || "ADMIN";
+      user.accountStatus = "active";
 
       await user.save();
     }

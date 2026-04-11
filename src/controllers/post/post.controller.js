@@ -466,6 +466,8 @@ export const savePost = async (req, res) => {
     const Model = targetType === "post" ? Post : GroupPost;
 
     const post = await Model.findOne({ _id: postId, isDeleted: false });
+    console.log('post',post);
+    
     if (!post) return res.status(404).json({ message: "Not found" });
 
     const r = await Save.updateOne(
@@ -559,6 +561,8 @@ export const getSavedPosts = async (req, res) => {
 
     // remove null posts (deleted)
     const posts = saves.map((s) => s.post).filter(Boolean);
+    console.log("posts", saves);
+    
 
     return res.json({ success: true, page, limit, posts });
   } catch (e) {

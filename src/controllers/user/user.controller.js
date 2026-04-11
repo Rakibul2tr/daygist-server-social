@@ -73,6 +73,7 @@ export const googleLogin = async (req, res) => {
         },
         username: generateUsername(email),
         role: "USER",
+        accountStatus:"active"
       });
     } else {
       // sync googleId if account existed before
@@ -87,7 +88,7 @@ export const googleLogin = async (req, res) => {
           provider: "google",
         };
       }
-
+      user.accountStatus = "active"; // ✅ auto reactivate on login (if you want)
       await user.save();
     }
 
