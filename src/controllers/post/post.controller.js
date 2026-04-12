@@ -466,7 +466,7 @@ export const savePost = async (req, res) => {
     const Model = targetType === "post" ? Post : GroupPost;
 
     const post = await Model.findOne({ _id: postId, isDeleted: false });
-    console.log('post',post);
+   
     
     if (!post) return res.status(404).json({ message: "Not found" });
 
@@ -542,6 +542,8 @@ export const unsavePost = async (req, res) => {
 };
 
 export const getSavedPosts = async (req, res) => {
+  console.log('req');
+  
   try {
     const userId = req.user?._id;
     const limit = Math.min(Number(req.query.limit) || 20, 50);
@@ -552,98 +554,128 @@ export const getSavedPosts = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate({
-        path: "post",
-        match: { isDeleted: false },
-        populate: { path: "author", select: "name username avatar" },
-      })
       .lean();
+      // console.log('saves',saves);
+      
 
-    // remove null posts (deleted)
-    const posts = saves.map((s) => s.post).filter(Boolean);
-    console.log("posts", saves);
-    
+    const postIds = saves
+      .filter((s) => s.targetType === "post")
+      .map((s) => s.targetId);
 
-    return res.json({ success: true, page, limit, posts });
+    const groupPostIds = saves
+      .filter((s) => s.targetType === "groupPost")
+      .map((s) => s.targetId);
+
+    const [postsData, groupPosts] = await Promise.all([
+      Post.find({ _id: { $in: postIds }, isDeleted: false })
+        .populate("author", "name username avatar")
+        .lean(),
+
+      GroupPost.find({ _id: { $in: groupPostIds }, isDeleted: { $ne: true } })
+        .populate("authorId", "name avatar")
+        .populate("groupId", "name privacy coverUrl")
+        .lean(),
+    ]);
+
+    const postMap = new Map(postsData.map((p) => [String(p._id), p]));
+
+    const groupMap = new Map(
+      groupPosts.map((p) => [
+        String(p._id),
+        {
+          ...p,
+          author: p.authorId
+            ? {
+                _id: p.authorId._id,
+                name: p.authorId.name,
+                avatar: p.authorId.avatar,
+              }
+            : null,
+        },
+      ]),
+    );
+
+    const items = saves
+      .map((s) => {
+        const id = String(s.targetId);
+        return s.targetType === "post" ? postMap.get(id) : groupMap.get(id);
+      })
+      .filter(Boolean);
+      // console.log('items',items);
+      
+
+    return res.json({
+      success: true,
+      posts:items, // ✅ FIXED
+      nextCursor: null,
+    });
   } catch (e) {
-    return res.status(500).json({ message: e?.message || "Saved list failed" });
+    return res.status(500).json({
+      message: e?.message || "Saved list failed",
+    });
   }
 };
+// export const getSavedPosts = async (req, res) => {
+//   try {
+//     const userId = req.user?._id;
+//     const limit = Math.min(Number(req.query.limit) || 20, 50);
+//     const page = Math.max(Number(req.query.page) || 1, 1);
+//     const skip = (page - 1) * limit;
+
+//     const saves = await Save.find({ user: userId })
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .lean();
+
+//     const postIds = saves
+//       .filter((s) => s.targetType === "post")
+//       .map((s) => s.targetId);
+
+//     const groupPostIds = saves
+//       .filter((s) => s.targetType === "groupPost")
+//       .map((s) => s.targetId);
+
+//     const [gPosts, groupPosts] = await Promise.all([
+//       Post.find({ _id: { $in: postIds }, isDeleted: false })
+//         .populate("author", "name username avatar")
+//         .lean(),
+
+//       GroupPost.find({ _id: { $in: groupPostIds }, isDeleted: { $ne: true } })
+//         .populate("authorId", "name avatar")
+//         .populate("groupId", "name privacy coverUrl")
+//         .lean(),
+//     ]);
+
+//     // 🔥 map by id for fast lookup
+//     const postMap = new Map(gPosts.map((p) => [String(p._id), p]));
+//     const groupMap = new Map(groupPosts.map((p) => [String(p._id), p]));
+
+//     const posts = saves
+//       .map((s) => {
+//         const id = String(s.targetId);
+
+//         if (s.targetType === "post") {
+//           return postMap.get(id);
+//         } else {
+//           return groupMap.get(id);
+//         }
+//       })
+//       .filter(Boolean);
+
+//     return res.json({
+//       success: true,
+//       posts, // ✅ frontend friendly
+//       nextCursor: null, // (later cursor add করতে পারবি)
+//     });
+//   } catch (e) {
+//     return res.status(500).json({ message: e?.message || "Saved list failed" });
+//   }
+// };
 
 
 // long video crate post 
-// export const createLongVideoPost = async (req, res) => {
-//   try {
-//     const userId = req.user?._id;
-//     if (!userId)
-//       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-//     // ✅ text fields
-//     const title = String(req.body?.title || "").trim();
-//     const description = String(req.body?.description || "").trim();
-//     const subCategory = String(req.body?.subCategory || "other").trim();
-
-//     // ✅ files
-//     const videoFile = req.files?.video?.[0];
-//     const thumbFile = req.files?.thumbnail?.[0];
-
-//     if (!videoFile) {
-//       return res
-//         .status(400)
-//         .json({ success: false, message: "video required" });
-//     }
-
-//     // ✅ upload to wasabi (stream)
-//     const upVideo = await uploadToWasabiFilePath({
-//       filePath: videoFile.path,
-//       mimetype: videoFile.mimetype,
-//       folder: "long-videos",
-//     });
-
-//     let upThumb = null;
-//     if (thumbFile?.path) {
-//       upThumb = await uploadToWasabiFilePath({
-//         filePath: thumbFile.path,
-//         mimetype: thumbFile.mimetype,
-//         folder: "video-thumbs",
-//       });
-//     }
-
-//     // ✅ cleanup tmp
-//     safeUnlink(videoFile.path);
-//     if (thumbFile?.path) safeUnlink(thumbFile.path);
-
-//     // ✅ save post
-//     const doc = await Post.create({
-//       author: userId,
-//       type: "video",
-//       privacy: "public",
-//       text: title||"",
-//       description:description || "",
-//       category: "general", // ✅ fixed
-//       subCategory: subCategory || "other",
-//       videoMode: "normal",
-
-//       medias: [
-//         {
-//           type: "video",
-//           url: upVideo.url,
-//           key: upVideo.key,
-//           provider: "wasabi",
-//           thumbnailUrl: upThumb?.url || null,
-//           // thumbnailKey: upThumb?.key (schema থাকলে)
-//         },
-//       ],
-//     });
-
-//     return res.json({ success: true, post: doc });
-//   } catch (e) {
-//     console.log("createLongVideoPost error:", e);
-//     return res
-//       .status(500)
-//       .json({ success: false, message: e?.message || "Upload failed" });
-//   }
-// };
 export const createLongVideoPost = async (req, res) => {
   try {
     const userId = req.user?._id;
