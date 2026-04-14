@@ -55,7 +55,7 @@ export const googleLogin = async (req, res) => {
       $or: [{ googleId: sub }, { email }],
     });
 
-    if (user.accountStatus === "suspended") {
+    if (user?.accountStatus === "suspended") {
       return res.status(403).json({
         message: "Account suspended",
       });

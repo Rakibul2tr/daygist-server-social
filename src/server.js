@@ -13,6 +13,12 @@ const server = http.createServer(app);
 // init socket.io
 initSocketServer(server);
 
+console.log(
+  "CLIENT_ID:",
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_ID1
+,process.env.GOOGLE_CLIENT_ID2);
+
 async function start() {
   try {
     await connectDB();
