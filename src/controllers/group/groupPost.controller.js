@@ -24,6 +24,7 @@ export const createGroupPost = async (req, res) => {
 
     const body = req.body || {};
     const type = String(body.type || "").trim();
+    body.postType='groupPost'
 
     if (!["text", "image", "video"].includes(type)) {
       return res.status(400).json({ message: "Invalid post type" });

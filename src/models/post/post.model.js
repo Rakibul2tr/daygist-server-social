@@ -58,6 +58,13 @@ const postSchema = new mongoose.Schema(
       index: true,
     },
 
+    // ✅ post type group post or general post
+    postType: {
+      type: String,
+      enum: ["groupPost", "post"],
+      default: "post",
+      index: true,
+    },
     // ✅ post content type
     type: {
       type: String,
@@ -107,7 +114,7 @@ const postSchema = new mongoose.Schema(
     category: {
       type: String,
       enum: ["general", "reels"],
-      default: "general",
+      default: "reels",
       index: true,
     },
     subCategory: { type: String, default: "other", index: true },

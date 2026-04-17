@@ -60,8 +60,20 @@ const GroupPostSchema = new Schema(
     loop: { type: Boolean, default: false },
 
     // reels style optional
-    category: { type: String, default: "group" },
+    category: {
+      type: String,
+      enum: ["general", "reels"],
+      default: "reels",
+      index: true,
+    },
     subCategory: { type: String },
+    // ✅ post type group post or general post
+    postType: {
+      type: String,
+      enum: ["groupPost", "post"],
+      default: "groupPost",
+      index: true,
+    },
 
     // moderation
     isDeleted: { type: Boolean, default: false, index: true },

@@ -47,10 +47,11 @@ export const createPost = async (req, res) => {
 
       // legacy
       medias,
+      postType
     } = req.body || {};
 
-    const postType = ["text", "image", "video"].includes(type) ? type : null;
-    if (!postType)
+    const postContentType = ["text", "image", "video"].includes(type) ? type : null;
+    if (!postContentType)
       return res.status(400).json({ message: "Invalid post type" });
 
     const safePrivacy = ["public", "followers", "only_me"].includes(privacy)
@@ -61,11 +62,11 @@ export const createPost = async (req, res) => {
     const isValidUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
 
     // ✅ unify caption/text into one "text"
-    const cleanText = toStr(postType === "text" ? text : caption);
+    const cleanText = toStr(postContentType === "text" ? text : caption);
 
     // ✅ sanitize textStyle (align enum)
     const safeTextStyle =
-      postType === "text" && textStyle
+      postContentType === "text" && textStyle
         ? {
             color: textStyle?.color || null,
             fontSize: Number.isFinite(Number(textStyle?.fontSize))
@@ -80,12 +81,12 @@ export const createPost = async (req, res) => {
 
     // ✅ derive category safely (model enum: general|reels)
     const safeVideoMode =
-      postType === "video" && ["normal", "reels", "live"].includes(videoMode)
+      postContentType === "video" && ["normal", "reels", "live"].includes(videoMode)
         ? videoMode
         : "normal";
 
     const safeCategory =
-      postType === "video"
+      postContentType === "video"
         ? safeVideoMode === "reels" || category === "reels"
           ? "reels"
           : "general"
@@ -96,7 +97,7 @@ export const createPost = async (req, res) => {
     // ✅ build medias
     let safeMedias = [];
 
-    if (postType === "image") {
+    if (postContentType === "image") {
       const arr = Array.isArray(images) ? images : [];
       safeMedias = arr
         .filter((m) => isValidUrl(m?.url))
@@ -129,7 +130,7 @@ export const createPost = async (req, res) => {
       }
     }
 
-    if (postType === "video") {
+    if (postContentType === "video") {
       const vurl = toStr(video?.url);
       if (vurl && isValidUrl(vurl)) {
         const thumb = toStr(video?.thumbnailUrl);
@@ -170,7 +171,7 @@ export const createPost = async (req, res) => {
       }
     }
 
-    if (postType === "text") {
+    if (postContentType === "text") {
       if (!cleanText)
         return res.status(400).json({ message: "Text post needs text." });
       safeMedias = [];
@@ -199,15 +200,17 @@ export const createPost = async (req, res) => {
 
     const doc = await Post.create({
       author: userId,
-      type: postType,
+      type: postContentType,
       privacy: safePrivacy,
 
-      text:  cleanText || "",
+      text: cleanText || "",
       feeling: toStr(feeling) || null,
 
       // text extras
       backgroundUrl:
-        postType === "text" && isValidUrl(backgroundUrl) ? backgroundUrl : null,
+        postContentType === "text" && isValidUrl(backgroundUrl)
+          ? backgroundUrl
+          : null,
       textStyle: safeTextStyle,
 
       // medias
@@ -215,19 +218,20 @@ export const createPost = async (req, res) => {
 
       // image extras
       layout:
-        postType === "image" &&
+        postContentType === "image" &&
         ["single", "grid2", "grid3", "carousel"].includes(layout)
           ? layout
           : null,
 
       // video extras
-      mutedByDefault: postType === "video" ? !!mutedByDefault : true,
-      loop: postType === "video" ? !!loop : false,
+      mutedByDefault: postContentType === "video" ? !!mutedByDefault : true,
+      loop: postContentType === "video" ? !!loop : false,
       videoMode: safeVideoMode,
 
       // category/subCategory (safe)
       category: safeCategory,
       subCategory: safeSubCategory,
+      postType: postType ? postType : "post",
     });
 
     const populated = await Post.findById(doc._id).populate(
