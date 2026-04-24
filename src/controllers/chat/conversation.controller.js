@@ -192,7 +192,7 @@ export const getMyConversations = async (req, res) => {
       Conversation.find(filter)
         .populate(
           "participants",
-          "fullname name username cover email isOnline lastSeen",
+          "name username cover email isOnline lastSeen avatar",
         )
         .sort({ lastMessageAt: -1 })
         .skip(skip)
