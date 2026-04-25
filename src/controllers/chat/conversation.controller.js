@@ -120,7 +120,7 @@ export const getConversationById = async (req, res) => {
     const conv = await Conversation.findById(conversationId)
       .populate(
         "participants",
-        "fullname name username cover email isOnline lastSeen profilePic",
+        "fullname name username cover email isOnline lastSeen avatar",
       )
       .lean();
 

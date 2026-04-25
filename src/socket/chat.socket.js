@@ -3,6 +3,7 @@ import User from "../models/user/user.model.js";
 // ✅ multi-device safe
 const onlineUsers = new Map(); // userId -> Set(socketId)
 const socketUsers = new Map(); // socketId -> userId
+const disconnectTimers = new Map(); // userId -> timeout
 
 export const getReceiverSocketId = (userId) => {
   const set = onlineUsers.get(String(userId));
@@ -23,6 +24,12 @@ export const setupChatSocket = (io, socket) => {
     if (!userId) return;
 
     const safeUserId = String(userId);
+
+    const timer = disconnectTimers.get(safeUserId);
+    if (timer) {
+      clearTimeout(timer);
+      disconnectTimers.delete(safeUserId);
+    }
 
     // add socket id into set
     const prevSet = onlineUsers.get(safeUserId) || new Set();
@@ -140,6 +147,44 @@ export const setupChatSocket = (io, socket) => {
   });
 
   // ✅ DISCONNECT
+  // socket.on("disconnect", async () => {
+  //   const userId = socketUsers.get(socket.id);
+  //   if (!userId) return;
+
+  //   socketUsers.delete(socket.id);
+
+  //   const set = onlineUsers.get(String(userId));
+  //   if (set) {
+  //     set.delete(socket.id);
+
+  //     // user still has other devices online
+  //     if (set.size > 0) {
+  //       onlineUsers.set(String(userId), set);
+  //       return;
+  //     }
+
+  //     // remove empty set
+  //     onlineUsers.delete(String(userId));
+  //   }
+
+  //   // ✅ DB update ONLY when last device disconnected
+  //   try {
+  //     await User.findByIdAndUpdate(
+  //       userId,
+  //       { $set: { isOnline: false, lastSeen: new Date() } },
+  //       { new: false },
+  //     );
+  //   } catch (e) {
+  //     console.log("isOnline false failed:", e.message);
+  //   }
+
+  //   socket.broadcast.emit("user-offline", {
+  //     userId: String(userId),
+  //   });
+
+  //   console.log(`❌ User disconnected: ${userId}`);
+  // });
+
   socket.on("disconnect", async () => {
     const userId = socketUsers.get(socket.id);
     if (!userId) return;
@@ -150,31 +195,30 @@ export const setupChatSocket = (io, socket) => {
     if (set) {
       set.delete(socket.id);
 
-      // user still has other devices online
       if (set.size > 0) {
         onlineUsers.set(String(userId), set);
         return;
       }
 
-      // remove empty set
       onlineUsers.delete(String(userId));
     }
 
-    // ✅ DB update ONLY when last device disconnected
-    try {
-      await User.findByIdAndUpdate(
-        userId,
-        { $set: { isOnline: false, lastSeen: new Date() } },
-        { new: false },
-      );
-    } catch (e) {
-      console.log("isOnline false failed:", e.message);
-    }
+    // ❗ delay offline
+    const timer = setTimeout(async () => {
+      try {
+        await User.findByIdAndUpdate(userId, {
+          isOnline: false,
+          lastSeen: new Date(),
+        });
 
-    socket.broadcast.emit("user-offline", {
-      userId: String(userId),
-    });
+        socket.broadcast.emit("user-offline", {
+          userId: String(userId),
+        });
 
-    console.log(`❌ User disconnected: ${userId}`);
+        console.log("❌ delayed offline:", userId);
+      } catch (e) {}
+    }, 15000); // ⏱ 15 sec delay
+
+    disconnectTimers.set(userId, timer);
   });
 };

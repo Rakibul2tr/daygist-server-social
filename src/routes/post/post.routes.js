@@ -11,7 +11,7 @@ import {
   getSavedPosts,
 } from "../../controllers/post/post.controller.js";
 import { getPostLikes, likePost, unlikePost } from "../../controllers/post/postLike.controller.js";
-import { getPostShares, sharePost } from "../../controllers/post/postShare.controller.js";
+import { getDeepLinkPostHtml, getPostShares, sharePost } from "../../controllers/post/postShare.controller.js";
 import { addView } from "../../controllers/post/videoView.controller.js";
 
 const router = Router();
@@ -38,6 +38,7 @@ router.delete("/:postId/like", authGuard, unlikePost);
 router.get("/:postId/likes", authGuard, getPostLikes);
 
 router.post("/:postId/share", authGuard, sharePost);
+router.get("/deepLink/:postId", authGuard, getDeepLinkPostHtml);
 router.get("/:postId/shares", authGuard, getPostShares);
 
 // video view count
