@@ -3,6 +3,7 @@ import {
   createOrGetConversation,
   getConversationById,
   getMyConversations,
+  getTotalUnseenCount,
 } from "../../controllers/chat/conversation.controller.js";
 import {
   getMessagesByConversation,
@@ -27,9 +28,11 @@ router.get("/users/chat-online", authGuard, getChatOnlineUnion);
 /**
  * Messages
  */
+router.get("/unseenCount", authGuard, getTotalUnseenCount);
 router.get("/messages/:conversationId", authGuard, getMessagesByConversation);
 router.post("/messages/send", authGuard, sendMessage);
 router.patch("/messages/seen/:conversationId", authGuard, markMessagesSeen);
+
 
 /**
  * Optional

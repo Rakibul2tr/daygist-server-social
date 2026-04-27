@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import Conversation from "../../models/chat/conversation.model.js";
 import Message from "../../models/chat/message.model.js";
 
-
 /**
  * POST /conversations/create-or-get
  * body: { otherUserId }
@@ -12,7 +11,6 @@ export const createOrGetConversation = async (req, res) => {
     const me = req.user?._id;
     const { otherUserId } = req.body;
     // console.log('otheruserid',otherUserId,me);
-    
 
     if (!me) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -88,7 +86,7 @@ export const createOrGetConversation = async (req, res) => {
     }
 
     // console.log('conversation',conversation);
-    
+
     return res.status(200).json({
       success: true,
       message: "Conversation fetched successfully",
@@ -251,5 +249,33 @@ export const getMyConversations = async (req, res) => {
       success: false,
       message: e.message || "Failed to fetch conversations",
     });
+  }
+};
+
+export const getTotalUnseenCount = async (req, res) => {
+  // console.log("req");
+  try {
+    const me = req.user?._id;
+    
+
+    if (!me) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // মেসেজ মডেলে যেখানে রিসিভার আমি এবং সিন হয়নি
+    const totalUnseen = await Message.countDocuments({
+      receiver: new mongoose.Types.ObjectId(String(me)),
+      seen: false,
+      isDeleted: false,
+    });
+    // console.log("totalUnseen", totalUnseen);
+    
+
+    return res.status(200).json({
+      success: true,
+      totalUnseen,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
   }
 };
