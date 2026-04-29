@@ -470,16 +470,10 @@ export const savePost = async (req, res) => {
     const Model = targetType === "post" ? Post : GroupPost;
 
     const post = await Model.findOne({ _id: postId, isDeleted: false });
-   
-    
     if (!post) return res.status(404).json({ message: "Not found" });
 
     const r = await Save.updateOne(
-      {
-        user: userId,
-        targetId: postId,
-        targetType,
-      },
+      { user: userId, targetId: postId, targetType },
       {
         $setOnInsert: {
           user: userId,
@@ -493,22 +487,18 @@ export const savePost = async (req, res) => {
     const inserted = r?.upsertedCount === 1 || !!r?.upsertedId;
 
     if (inserted) {
-      if (targetType === "post") {
-        await Post.updateOne({ _id: postId }, { $inc: { saveCount: 1 } });
-      } else {
-        await GroupPost.updateOne({ _id: postId }, { $inc: { saveCount: 1 } });
-      }
+      await Model.updateOne({ _id: postId }, { $inc: { saveCount: 1 } });
 
       return res.json({
         success: true,
-        saved: true,
+        isSaved: true, // ✅ clear
         message: "Saved successful",
       });
     }
 
     return res.json({
       success: true,
-      saved: false,
+      isSaved: true, // ⚠️ already saved হলেও true
       message: "Already saved",
     });
   } catch (e) {
@@ -525,6 +515,8 @@ export const unsavePost = async (req, res) => {
     const targetType =
       req.body?.targetType === "groupPost" ? "groupPost" : "post";
 
+    const Model = targetType === "post" ? Post : GroupPost;
+
     const deleted = await Save.deleteOne({
       user: userId,
       targetId: postId,
@@ -532,14 +524,14 @@ export const unsavePost = async (req, res) => {
     });
 
     if (deleted.deletedCount) {
-      if (targetType === "post") {
-        await Post.updateOne({ _id: postId }, { $inc: { saveCount: -1 } });
-      } else {
-        await GroupPost.updateOne({ _id: postId }, { $inc: { saveCount: -1 } });
-      }
+      await Model.updateOne({ _id: postId }, { $inc: { saveCount: -1 } });
     }
 
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      isSaved: false, // ✅ important
+      message: "Unsaved",
+    });
   } catch (e) {
     return res.status(500).json({ message: e?.message || "Unsave failed" });
   }

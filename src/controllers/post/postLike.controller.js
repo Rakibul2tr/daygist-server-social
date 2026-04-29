@@ -148,8 +148,10 @@ export const unlikePost = async (req, res) => {
 
 export const getPostLikes = async (req, res) => {
   try {
-    const id = String(req.params.id || "");
+    const id = String(req.params.postId || "");
     const type = String(req.query.type || "post");
+    console.log('id',id);
+    
 
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ message: "Invalid id" });
@@ -166,7 +168,7 @@ export const getPostLikes = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("userId", "name username profilePic avatar uid")
+        .populate("userId", "name username cover avatar uid")
         .lean();
 
       const users = rows.map((r) => r.userId).filter(Boolean);
@@ -178,10 +180,12 @@ export const getPostLikes = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("user", "name username profilePic avatar uid")
+      .populate("user", "name username cover avatar uid")
       .lean();
-
+    
+    
     const users = rows.map((r) => r.user).filter(Boolean);
+    // console.log("users", users);
     return res.json({ success: true, page, limit, users });
   } catch (e) {
     return res

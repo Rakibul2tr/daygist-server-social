@@ -123,7 +123,7 @@ export const createStory = async (req, res) => {
   }
 };
 
-// GET USER STORIES
+// GET specipic USER STORIES
 export const getUserStories = async (req, res) => {
   try {
     const me = req.user?._id;
