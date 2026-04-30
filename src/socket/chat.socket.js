@@ -81,6 +81,11 @@ export const setupChatSocket = (io, socket) => {
           message,
         });
       });
+
+      io.to(sid).emit("conversation-updated", {
+        conversationId: String(conversationId),
+        lastMessage: message,
+      });
     }
 
     socket.emit("message-sent-realtime", {
@@ -147,43 +152,7 @@ export const setupChatSocket = (io, socket) => {
   });
 
   // ✅ DISCONNECT
-  // socket.on("disconnect", async () => {
-  //   const userId = socketUsers.get(socket.id);
-  //   if (!userId) return;
-
-  //   socketUsers.delete(socket.id);
-
-  //   const set = onlineUsers.get(String(userId));
-  //   if (set) {
-  //     set.delete(socket.id);
-
-  //     // user still has other devices online
-  //     if (set.size > 0) {
-  //       onlineUsers.set(String(userId), set);
-  //       return;
-  //     }
-
-  //     // remove empty set
-  //     onlineUsers.delete(String(userId));
-  //   }
-
-  //   // ✅ DB update ONLY when last device disconnected
-  //   try {
-  //     await User.findByIdAndUpdate(
-  //       userId,
-  //       { $set: { isOnline: false, lastSeen: new Date() } },
-  //       { new: false },
-  //     );
-  //   } catch (e) {
-  //     console.log("isOnline false failed:", e.message);
-  //   }
-
-  //   socket.broadcast.emit("user-offline", {
-  //     userId: String(userId),
-  //   });
-
-  //   console.log(`❌ User disconnected: ${userId}`);
-  // });
+ 
 
   socket.on("disconnect", async () => {
     const userId = socketUsers.get(socket.id);

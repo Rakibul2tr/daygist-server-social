@@ -16,6 +16,20 @@ const conversationSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    type: {
+      type: String,
+      enum: ["general", "market"],
+      default: "general",
+    },
+    status: {
+      type: String,
+      enum: ["requested", "accepted","rejected"],
+      default: "requested",
+    },
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
 
     // text | image | voice
     lastMessageType: {
@@ -57,7 +71,7 @@ conversationSchema.pre("save", function () {
  * Same 2 user আবার নতুন conversation না বানাতে.
  * Since array exact-order issue থাকতে পারে, controller-এ sorted order use করবে.
  */
-conversationSchema.index({ participants: 1 });
+conversationSchema.index({ participants: 1 }, { unique: true });
 
 /**
  * Inbox sorting speed

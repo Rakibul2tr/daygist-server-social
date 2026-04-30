@@ -9,8 +9,9 @@ import Message from "../../models/chat/message.model.js";
 export const createOrGetConversation = async (req, res) => {
   try {
     const me = req.user?._id;
-    const { otherUserId } = req.body;
+    const { otherUserId,type } = req.body;
     // console.log('otheruserid',otherUserId,me);
+    const typeSelect = type == "market" ? "market" : "general";
 
     if (!me) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -65,6 +66,9 @@ export const createOrGetConversation = async (req, res) => {
           lastMessageType: "text",
           lastMessageAt: new Date(),
           unreadCount: 0,
+          status: "requested", // 🔥 add
+          requestedBy: me, // 🔥 add
+          type: typeSelect,
         });
         console.log("✅ created id:", created?._id);
       } catch (err) {
@@ -256,7 +260,6 @@ export const getTotalUnseenCount = async (req, res) => {
   // console.log("req");
   try {
     const me = req.user?._id;
-    
 
     if (!me) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -269,11 +272,73 @@ export const getTotalUnseenCount = async (req, res) => {
       isDeleted: false,
     });
     // console.log("totalUnseen", totalUnseen);
-    
 
     return res.status(200).json({
       success: true,
       totalUnseen,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+
+export const acceptConversationRequest = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const { conversationId } = req.params;
+
+    const conversation = await Conversation.findById(conversationId);
+
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: "Not found" });
+    }
+
+    if (String(me) === String(conversation.requestedBy)) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Invalid action" });
+    }
+
+    conversation.status = "accepted";
+    await conversation.save();
+
+    return res.json({
+      success: true,
+      message: "Conversation accepted",
+      data: conversation,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+
+// DELETE /conversations/reject/:id
+export const rejectRequest = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const { conversationId } = req.params;
+
+    const conversation = await Conversation.findById(conversationId);
+
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: "Not found" });
+    }
+
+    if (String(me) === String(conversation.requestedBy)) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Invalid action" });
+    }
+
+    conversation.status = "rejected";
+    await conversation.save();
+
+    return res.json({
+      success: true,
+      message: "Conversation accepted",
+      data: conversation,
     });
   } catch (e) {
     return res.status(500).json({ success: false, message: e.message });

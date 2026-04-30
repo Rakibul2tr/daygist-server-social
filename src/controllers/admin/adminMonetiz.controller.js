@@ -5,10 +5,10 @@ import User from "../../models/user/user.model.js";
 
 export const adminListMonetization = async (req, res) => {
   try {
-    const status = req.query.status || "pending";
-    const items = await Monetization.find({ status })
+    // const status = req.query.status || "pending";
+    const items = await Monetization.find({ })
       .sort({ createdAt: -1 })
-      .populate("userId", "name username avatar email")
+      .populate("userId", "name username avatar email cover")
       .lean();
 
     return res.json({ ok: true, items });
