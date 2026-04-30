@@ -1,12 +1,23 @@
+import { log } from "console";
 import Monetization from "../../models/monetization/monetization.model.js";
 import User from "../../models/user/user.model.js";
 
 
 
 export const adminListMonetization = async (req, res) => {
+  
   try {
-    // const status = req.query.status || "pending";
-    const items = await Monetization.find({ })
+     const status = req.query.status;
+
+     // একটি খালি অবজেক্ট তৈরি করুন
+     let filter = {};
+
+     // যদি status থাকে, তবে ফিল্টার অবজেক্টে সেটি যোগ করুন
+     if (status) {
+       filter.status = status;
+     }
+    
+    const items = await Monetization.find( filter )
       .sort({ createdAt: -1 })
       .populate("userId", "name username avatar email cover")
       .lean();
@@ -28,7 +39,7 @@ export const adminApproveMonetization = async (req, res) => {
         .status(404)
         .json({ ok: false, message: "Application not found" });
 
-    if (app.status !== "pending") {
+    if (app.status == "approved") {
       return res
         .status(400)
         .json({ ok: false, message: `Already ${app.status}` });
@@ -65,10 +76,10 @@ export const adminRejectMonetization = async (req, res) => {
         .status(404)
         .json({ ok: false, message: "Application not found" });
 
-    if (app.status !== "pending") {
+    if (app.status == "rejected") {
       return res
         .status(400)
-        .json({ ok: false, message: `Already ${app.status}` });
+        .json({ ok: false, message: `Already Rejected for ${app.rejectReason}` });
     }
 
     app.status = "rejected";
@@ -81,7 +92,7 @@ export const adminRejectMonetization = async (req, res) => {
       $set: { monetizationStatus: "rejected", isMonetization: false },
     });
 
-    return res.json({ ok: true, message: "Rejected", data: app });
+    return res.json({ ok: true, message: `Rejected for ${reason}`, data: app });
   } catch (e) {
     return res
       .status(500)
