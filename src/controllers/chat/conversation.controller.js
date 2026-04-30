@@ -284,9 +284,12 @@ export const getTotalUnseenCount = async (req, res) => {
 
 
 export const acceptConversationRequest = async (req, res) => {
+  console.log('click');
+  
   try {
     const me = req.user?._id;
     const { conversationId } = req.params;
+    const status=req.query.status
 
     const conversation = await Conversation.findById(conversationId);
 
@@ -299,13 +302,17 @@ export const acceptConversationRequest = async (req, res) => {
         .status(403)
         .json({ success: false, message: "Invalid action" });
     }
-
-    conversation.status = "accepted";
+    if (status == "approved") {
+      conversation.status = "approved";
+    }else{
+      conversation.status = "rejected";
+    }
+    
     await conversation.save();
 
     return res.json({
       success: true,
-      message: "Conversation accepted",
+      message: `Conversation ${status}`,
       data: conversation,
     });
   } catch (e) {

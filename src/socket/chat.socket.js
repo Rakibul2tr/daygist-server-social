@@ -74,18 +74,20 @@ export const setupChatSocket = (io, socket) => {
     const receiverSet = onlineUsers.get(String(receiverId));
 
     if (receiverSet && receiverSet.size > 0) {
-      // send to all receiver devices
+     
       receiverSet.forEach((sid) => {
         io.to(sid).emit("receive-message", {
           conversationId: String(conversationId),
           message,
         });
+
+        // ✅ FIX: inside loop
+        io.to(sid).emit("conversation-updated", {
+          conversationId: String(conversationId),
+          lastMessage: message,
+        });
       });
 
-      io.to(sid).emit("conversation-updated", {
-        conversationId: String(conversationId),
-        lastMessage: message,
-      });
     }
 
     socket.emit("message-sent-realtime", {

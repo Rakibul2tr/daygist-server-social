@@ -511,7 +511,7 @@ export const sendMessage = async (req, res) => {
 
       if (!isMember) throw new Error("Not allowed");
 
-      if (conversation.status !== "accepted") {
+      if (conversation.status !== "approved") {
         return res.status(403).json({
           success: false,
           message: "Message request not accepted yet",
@@ -555,7 +555,7 @@ export const sendMessage = async (req, res) => {
         conversation = conversation[0];
       }
 
-      if (conversation.status !== "accepted") {
+      if (conversation.status !== "approved") {
         return res.status(403).json({
           success: false,
           message: "Message request pending",

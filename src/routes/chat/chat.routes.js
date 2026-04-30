@@ -23,16 +23,12 @@ const router = express.Router();
 router.post("/conversations/create-or-get", authGuard, createOrGetConversation);
 router.get("/conversations/my", authGuard, getMyConversations);
 router.get("/conversations/:conversationId", authGuard, getConversationById);
-router.get(
-  "/conversations/:conversationId/accept",
+router.patch(
+  "/conversations/accept/:conversationId",
   authGuard,
   acceptConversationRequest,
 );
-router.get(
-  "/conversations/:conversationId/rejected",
-  authGuard,
-  acceptConversationRequest,
-);
+
 
 router.get("/users/chat-online", authGuard, getChatOnlineUnion);
 
