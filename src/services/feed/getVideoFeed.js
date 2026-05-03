@@ -4,6 +4,7 @@ import Follow from "../../models/follow/follow.model.js";
 import PostLike from "../../models/post/postLike.model.js";
 import PostShare from "../../models/post/postShare.model.js";
 import VideoInterest from "../../models/post/videoInterest.model.js";
+import Save from "../../models/post/save.model.js";
 
 export async function getVideoFeed({
   userId,
@@ -169,27 +170,40 @@ export async function getVideoFeed({
   if (userId && items.length > 0) {
     const postIds = items.map((p) => p._id);
 
-    const [likedRows, sharedRows] = await Promise.all([
+    const [likedRows, sharedRows, savedRows] = await Promise.all([
       PostLike.find({ user: userId, post: { $in: postIds } })
         .select("post")
         .lean(),
       PostShare.find({ user: userId, post: { $in: postIds } })
         .select("post")
         .lean(),
+      // ✅ ONLY POST SAVE (correct)
+      Save.find({
+        user: userId,
+        targetId: { $in: postIds },
+        targetType: "post",
+      })
+        .select("targetId")
+        .lean(),
     ]);
 
     const likedSet = new Set(likedRows.map((r) => String(r.post)));
     const sharedSet = new Set(sharedRows.map((r) => String(r.post)));
+    const savedPostSet = new Set(savedRows.map((r) => String(r.targetId)));
 
     for (const p of items) {
       const pid = String(p._id);
       p.isLiked = likedSet.has(pid);
       p.isShared = sharedSet.has(pid);
+
+      // ✅ ADD THIS
+      p.isSaved = savedPostSet.has(pid);
     }
   } else {
     for (const p of items) {
       p.isLiked = false;
       p.isShared = false;
+      p.isSaved = false; // ✅ ADD
     }
   }
 
