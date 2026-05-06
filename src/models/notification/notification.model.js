@@ -13,7 +13,7 @@ const NotificationSchema = new Schema(
 
     type: {
       type: String,
-      enum: ["post_comment", "comment_reply"],
+      enum: ["post_comment", "comment_reply", "group_post_comment"],
       required: true,
       index: true,
     },

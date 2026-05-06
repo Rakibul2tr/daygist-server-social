@@ -4,7 +4,10 @@ import PostShare from "../../models/post/postShare.model.js";
 import Comment from "../../models/comment/comment.model.js";
 import VideoView from "../../models/post/videoView.model.js";
 import { getHomeFeed } from "../../services/feed/feed.service.js";
-import { deleteManyFromWasabi, uploadToWasabiFilePath } from "../../services/wbUpload.service.js";
+import {
+  deleteManyFromWasabi,
+  uploadToWasabiFilePath,
+} from "../../services/wbUpload.service.js";
 import PostLike from "../../models/post/postLike.model.js";
 import Follow from "../../models/follow/follow.model.js";
 import GroupPost from "../../models/group/groupPost.model.js";
@@ -47,10 +50,12 @@ export const createPost = async (req, res) => {
 
       // legacy
       medias,
-      postType
+      postType,
     } = req.body || {};
 
-    const postContentType = ["text", "image", "video"].includes(type) ? type : null;
+    const postContentType = ["text", "image", "video"].includes(type)
+      ? type
+      : null;
     if (!postContentType)
       return res.status(400).json({ message: "Invalid post type" });
 
@@ -81,7 +86,8 @@ export const createPost = async (req, res) => {
 
     // ✅ derive category safely (model enum: general|reels)
     const safeVideoMode =
-      postContentType === "video" && ["normal", "reels", "live"].includes(videoMode)
+      postContentType === "video" &&
+      ["normal", "reels", "live"].includes(videoMode)
         ? videoMode
         : "normal";
 
@@ -108,7 +114,7 @@ export const createPost = async (req, res) => {
 
           // optional meta (for delete support)
           provider: ["cloudinary", "wasabi", "s3", "local"].includes(
-            m?.provider
+            m?.provider,
           )
             ? m.provider
             : undefined,
@@ -141,12 +147,14 @@ export const createPost = async (req, res) => {
             type: "video",
 
             provider: ["cloudinary", "wasabi", "s3", "local"].includes(
-              video?.provider
+              video?.provider,
             )
               ? video.provider
               : undefined,
             publicId: toStr(video?.publicId) || undefined,
             key: toStr(video?.key) || undefined,
+            width: video?.width,
+            height: video?.height,
 
             // ✅ IMPORTANT: thumbnail should be remote url, not file://
             thumbnailUrl: isValidUrl(thumb) ? thumb : undefined,
@@ -186,7 +194,7 @@ export const createPost = async (req, res) => {
           url: m.url,
           type: m.type,
           provider: ["cloudinary", "wasabi", "s3", "local"].includes(
-            m?.provider
+            m?.provider,
           )
             ? m.provider
             : undefined,
@@ -236,7 +244,7 @@ export const createPost = async (req, res) => {
 
     const populated = await Post.findById(doc._id).populate(
       "author",
-      "name username avatar"
+      "name username avatar",
     );
 
     return res.json({ success: true, post: populated });
@@ -246,7 +254,7 @@ export const createPost = async (req, res) => {
       .json({ message: e?.message || "Create post failed" });
   }
 };
- //done f - s
+//done f - s
 
 export const updatePost = async (req, res) => {
   try {
@@ -261,7 +269,7 @@ export const updatePost = async (req, res) => {
     if (!isOwner(post, userId))
       return res.status(403).json({ message: "Forbidden" });
 
-    if(post.type == "text"){
+    if (post.type == "text") {
       post.text = (text || "").trim();
     }
     post.text = (text || "").trim();
@@ -269,7 +277,7 @@ export const updatePost = async (req, res) => {
 
     const populated = await Post.findById(post._id).populate(
       "author",
-      "name username avatar"
+      "name username avatar",
     );
     return res.json({ success: true, post: populated });
   } catch (e) {
@@ -278,7 +286,6 @@ export const updatePost = async (req, res) => {
       .json({ message: e?.message || "Update post failed" });
   }
 };
-
 
 export const deletePost = async (req, res) => {
   try {
@@ -385,7 +392,7 @@ export const deletePost = async (req, res) => {
 export const getPostById = async (req, res) => {
   try {
     const postId = req.params.id;
-    const me = req.user?._id || null; 
+    const me = req.user?._id || null;
 
     const post = await Post.findOne({ _id: postId, isDeleted: false })
       .populate("author", "name username avatar")
@@ -398,7 +405,6 @@ export const getPostById = async (req, res) => {
     let isShared = false;
     let isFollowingAuthor = false;
 
-    
     if (me) {
       const [likedRow, sharedRow, followingRow] = await Promise.all([
         PostLike.exists({ user: me, post: postId }),
@@ -406,7 +412,6 @@ export const getPostById = async (req, res) => {
         Follow.exists({ follower: me, following: post.author?._id }),
       ]);
       // console.log('liked row',likedRow);
-      
 
       isLiked = !!likedRow;
       isShared = !!sharedRow;
@@ -446,12 +451,10 @@ export const getFeed = async (req, res) => {
       }
     }
     // console.log('limit',limit,cursor);
-    
 
     const data = await getHomeFeed({ userId, limit, cursor });
     // console.log('data',data.items.length);
-    
-    
+
     return res.json({ success: true, ...data });
   } catch (e) {
     return res.status(500).json({ message: e?.message || "Feed failed" });
@@ -506,7 +509,6 @@ export const savePost = async (req, res) => {
   }
 }; // done f - s
 
-
 export const unsavePost = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -538,8 +540,8 @@ export const unsavePost = async (req, res) => {
 };
 
 export const getSavedPosts = async (req, res) => {
-  console.log('req');
-  
+  console.log("req");
+
   try {
     const userId = req.user?._id;
     const limit = Math.min(Number(req.query.limit) || 20, 50);
@@ -551,8 +553,7 @@ export const getSavedPosts = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .lean();
-      // console.log('saves',saves);
-      
+    // console.log('saves',saves);
 
     const postIds = saves
       .filter((s) => s.targetType === "post")
@@ -597,12 +598,11 @@ export const getSavedPosts = async (req, res) => {
         return s.targetType === "post" ? postMap.get(id) : groupMap.get(id);
       })
       .filter(Boolean);
-      // console.log('items',items);
-      
+    // console.log('items',items);
 
     return res.json({
       success: true,
-      posts:items, // ✅ FIXED
+      posts: items, // ✅ FIXED
       nextCursor: null,
     });
   } catch (e) {
@@ -669,8 +669,7 @@ export const getSavedPosts = async (req, res) => {
 //   }
 // };
 
-
-// long video crate post 
+// long video crate post
 
 export const createLongVideoPost = async (req, res) => {
   try {

@@ -8,6 +8,10 @@ import {
 import GroupPost  from "../../models/group/groupPost.model.js";
 import GroupMember from "../../models/group/groupMember.model.js";
 import Group from "../../models/group/group.model.js";
+import PostLike from "../../models/post/postLike.model.js";
+import PostShare from "../../models/post/postShare.model.js";
+import GroupPostLike from "../../models/group/groupPostLike.model.js";
+import GroupPostShare from "../../models/group/groupPostShare.model.js";
 
 /**
  * POST /groups/:groupId/posts
@@ -290,16 +294,48 @@ export const getMyGroupsPost = async (req, res) => {
 /**
  * GET /groups/:groupId/posts/:postId
  */
+// export const getSingleGroupPost = async (req, res) => {
+//   try {
+//     const me = req.user?._id;
+//     const { groupId, postId } = req.params;
+//     if (!me) return res.status(401).json({ message: "Unauthorized" });
+
+//     const okMem = await mustBeActiveMember({ me, groupId });
+//     if (!okMem.ok)
+//       return res.status(okMem.code).json({ message: okMem.message });
+
+//     const post = await GroupPost.findOne({
+//       _id: postId,
+//       groupId,
+//       isDeleted: { $ne: true },
+//     })
+//       .populate("authorId", "name avatar")
+//       .populate("groupId", "name coverUrl privacy")
+//       .lean();
+
+//     if (!post) return res.status(404).json({ message: "Post not found" });
+
+//     return res.json({ success: true, item: post });
+//   } catch (e) {
+//     return res
+//       .status(500)
+//       .json({ message: e?.message || "Fetch group post failed" });
+//   }
+// };
+
 export const getSingleGroupPost = async (req, res) => {
   try {
-    const me = req.user?._id;
+    const me = req.user?._id || null;
     const { groupId, postId } = req.params;
+
     if (!me) return res.status(401).json({ message: "Unauthorized" });
 
+    // 1. Group membership check
     const okMem = await mustBeActiveMember({ me, groupId });
     if (!okMem.ok)
       return res.status(okMem.code).json({ message: okMem.message });
 
+    // 2. Post fetch with Lean
     const post = await GroupPost.findOne({
       _id: postId,
       groupId,
@@ -311,14 +347,39 @@ export const getSingleGroupPost = async (req, res) => {
 
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    return res.json({ success: true, item: post });
+    // 3. Social Interaction States (Like/Share)
+    let isLiked = false;
+    let isShared = false;
+
+    // Parallel processing for performance
+    // ✅ CHECK FIELD NAMES: userId and postId (Based on your home feed code)
+    const [likedRow, sharedRow] = await Promise.all([
+      GroupPostLike.exists({ userId: me, postId: postId }),
+      GroupPostShare.exists({ userId: me, postId: postId }),
+    ]);
+    console.log('like row',likedRow);
+    
+
+    isLiked = !!likedRow;
+    isShared = !!sharedRow;
+
+    const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/group/${groupId}/post/${post._id}`;
+
+    return res.json({
+      success: true,
+      item: {
+        ...post,
+        isLiked,
+        isShared,
+      },
+      shareLink,
+    });
   } catch (e) {
     return res
       .status(500)
       .json({ message: e?.message || "Fetch group post failed" });
   }
 };
-
 /**
  * PATCH /groups/:groupId/posts/:postId
  * ✅ only author OR admin/moderator/owner
