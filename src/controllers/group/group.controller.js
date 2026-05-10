@@ -10,6 +10,11 @@ import {
 import User from "../../models/user/user.model.js";
 import Follow from "../../models/follow/follow.model.js";
 import { canManageMembers } from "../../helpers/groupPostHelper.js";
+import GroupPost from "../../models/group/groupPost.model.js";
+import GroupPostLike from "../../models/group/groupPostLike.model.js";
+import GroupPostShare from "../../models/group/groupPostShare.model.js";
+import Comment from "../../models/comment/comment.model.js";
+import { deleteManyFromWasabi } from "../../services/wbUpload.service.js";
 
 const makeUniqueSlug = async (base) => {
   let slug = base || `group-${Date.now()}`;
@@ -31,10 +36,21 @@ export const createGroup = async (req, res) => {
   const check = validateCreateGroupBody(req.body);
   if (!check.ok) return res.status(400).json({ message: check.message });
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
+    // ✅ STEP 1: check group count
+    const groupCount = await Group.countDocuments({
+      createdBy: me,
+    });
+
+    if (groupCount >= 5) {
+      return res.status(400).json({
+        success: false,
+        groupCount: groupCount,
+        message: "You can create up to 5 groups only",
+      });
+    }
+    const session = await mongoose.startSession();
+    session.startTransaction();
     const name = String(req.body.name).trim();
     const privacy = String(req.body.privacy).trim();
 
@@ -468,7 +484,6 @@ export const getForYouGroups = async (req, res) => {
   }
 };
 
-
 // get my created group and my joined group helper
 const createdCursorFilter = (cursor) => {
   if (!cursor?.createdAt || !cursor?._id) return {};
@@ -731,14 +746,12 @@ export const getMyYourGroups = async (req, res) => {
   }
 };
 
-
-// get group details 
+// get group details
 export const getGroupDetails = async (req, res) => {
   try {
     const me = req.user?._id; // auth থাকলে
     const groupId = String(req.params.groupId || "").trim();
-    console.log('group id',groupId);
-    
+    console.log("group id", groupId);
 
     if (!mongoose.Types.ObjectId.isValid(groupId)) {
       return res.status(400).json({ message: "Invalid group id" });
@@ -811,8 +824,7 @@ export const getGroupDetails = async (req, res) => {
   }
 };
 
-
-// GET /groups/:groupId/requests?limit=20&cursor=... join request get 
+// GET /groups/:groupId/requests?limit=20&cursor=... join request get
 export const getGroupJoinRequests = async (req, res) => {
   try {
     const me = req.user?._id;
@@ -843,7 +855,7 @@ export const getGroupJoinRequests = async (req, res) => {
       .populate("userId", "name avatarUrl avatarKey")
       .lean();
 
-    const items = rows.map(r => ({
+    const items = rows.map((r) => ({
       _id: r._id, // membershipId
       createdAt: r.createdAt,
       user: r.userId
@@ -858,12 +870,17 @@ export const getGroupJoinRequests = async (req, res) => {
 
     const nextCursor =
       rows.length > 0
-        ? { createdAt: rows[rows.length - 1].createdAt, _id: rows[rows.length - 1]._id }
+        ? {
+            createdAt: rows[rows.length - 1].createdAt,
+            _id: rows[rows.length - 1]._id,
+          }
         : null;
 
     return res.json({ success: true, items, nextCursor });
   } catch (e) {
-    return res.status(500).json({ message: e?.message || "Fetch requests failed" });
+    return res
+      .status(500)
+      .json({ message: e?.message || "Fetch requests failed" });
   }
 };
 
@@ -953,14 +970,16 @@ export const getGroupMembers = async (req, res) => {
   }
 };
 
-
 // PATCH /groups/:groupId/members/:memberId/status
 export const updateGroupMemberStatus = async (req, res) => {
   const me = req.user?._id;
   const { groupId, memberId } = req.params;
 
   if (!me) return res.status(401).json({ message: "Unauthorized" });
-  if (!mongoose.isValidObjectId(groupId) || !mongoose.isValidObjectId(memberId)) {
+  if (
+    !mongoose.isValidObjectId(groupId) ||
+    !mongoose.isValidObjectId(memberId)
+  ) {
     return res.status(400).json({ message: "Invalid id" });
   }
 
@@ -1022,13 +1041,13 @@ export const updateGroupMemberStatus = async (req, res) => {
       await Group.updateOne(
         { _id: new mongoose.Types.ObjectId(groupId) },
         { $inc: { "counts.members": 1 } },
-        { session }
+        { session },
       );
     } else if (wasActive && !willBeActive) {
       await Group.updateOne(
         { _id: new mongoose.Types.ObjectId(groupId) },
         { $inc: { "counts.members": -1 } },
-        { session }
+        { session },
       );
     }
 
@@ -1041,13 +1060,119 @@ export const updateGroupMemberStatus = async (req, res) => {
         nextStatus === "active"
           ? "Accepted"
           : nextStatus === "rejected"
-          ? "Rejected"
-          : "Blocked",
+            ? "Rejected"
+            : "Blocked",
       item: mem,
     });
   } catch (e) {
     await session.abortTransaction();
     session.endSession();
     return res.status(500).json({ message: e?.message || "Update failed" });
+  }
+};
+
+// DELETE /groups/:groupId delete group and all related data (posts/comments/likes/shares)
+export const deleteGroup = async (req, res) => {
+  const me = req.user?._id;
+  if (!me) return res.status(401).json({ message: "Unauthorized" });
+
+  const groupId = req.params?.groupId;
+
+  if (!mongoose.isValidObjectId(groupId)) {
+    return res.status(400).json({ message: "Invalid group id" });
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1️⃣ check group exists + permission
+    const group = await Group.findById(groupId).session(session);
+
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    if (String(group.createdBy) !== String(me)) {
+      return res.status(403).json({ message: "Not allowed" });
+    }
+
+    // 2️⃣ find all group posts
+    const posts = await GroupPost.find({ groupId }).session(session);
+    const postIds = posts.map((p) => p._id);
+
+    // ✅ collect media keys
+    const mediaKeys = [];
+
+    posts.forEach((post) => {
+      (post.medias || []).forEach((m) => {
+        if (m.provider === "wasabi") {
+          if (m.key) mediaKeys.push(m.key);
+          if (m.thumbnailKey) mediaKeys.push(m.thumbnailKey);
+        }
+      });
+    });
+
+    // 3️⃣ delete comments on posts
+    await Comment.deleteMany(
+      {
+        postId: { $in: postIds },
+        targetType: "groupPost",
+      },
+      { session },
+    );
+
+    // 4️⃣ delete likes (if separate collection)
+    await GroupPostLike.deleteMany(
+      {
+        postId: { $in: postIds },
+        type: "groupPost",
+      },
+      { session },
+    );
+
+    // 5️⃣ delete shares (if exist)
+    await GroupPostShare.deleteMany(
+      {
+        postId: { $in: postIds },
+        type: "groupPost",
+      },
+      { session },
+    );
+
+    // 6️⃣ delete all posts
+    await GroupPost.deleteMany({ groupId }, { session });
+
+    // 7️⃣ delete group members
+    await GroupMember.deleteMany({ groupId }, { session });
+
+    // 8️⃣ delete group itself
+    await Group.deleteOne({ _id: groupId }, { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // ✅ delete media from Wasabi AFTER DB success
+    try {
+      const uniqueKeys = [...new Set(mediaKeys)];
+
+      if (uniqueKeys.length) {
+        await deleteManyFromWasabi(uniqueKeys);
+      }
+    } catch (err) {
+      console.log("Wasabi delete failed:", err);
+    }
+
+    return res.json({
+      success: true,
+      message: "Group and all related data deleted successfully",
+    });
+  } catch (e) {
+    await session.abortTransaction();
+    session.endSession();
+
+    return res.status(500).json({
+      message: e?.message || "Delete group failed",
+    });
   }
 };

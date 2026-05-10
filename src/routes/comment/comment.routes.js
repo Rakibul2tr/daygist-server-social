@@ -5,6 +5,7 @@ import {
   getPostComments,
   getCommentReplies,
   deleteComment,
+  updateComment,
 } from "../../controllers/comment/comment.controller.js";
 import { authGuard } from "../../middleware/authMiddleware.js";
 
@@ -19,5 +20,8 @@ router.get("/:commentId/replies", getCommentReplies);
 
 // delete
 router.delete("/:commentId", authGuard, deleteComment);
+
+// update comment 
+router.put("/:commentId", authGuard, updateComment);
 
 export default router;

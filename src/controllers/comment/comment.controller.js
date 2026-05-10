@@ -872,7 +872,6 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 //   }
 // };
 
-
 export const createComment = async (req, res) => {
   const session = await mongoose.startSession();
 
@@ -1230,5 +1229,67 @@ export const deleteComment = async (req, res) => {
     return res.status(status).json({ ok: false, message: msg });
   } finally {
     session.endSession();
+  }
+};
+
+/* ===================================================================
+   ✅ update COMMENT 
+   Route: update /comments/:commentId
+=================================================================== */
+export const updateComment = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ ok: false, message: "Unauthorized" });
+    }
+
+    const commentId = String(req.params?.commentId || "");
+    const text = String(req.body?.text || "").trim();
+
+    if (!mongoose.isValidObjectId(commentId)) {
+      return res.status(400).json({ ok: false, message: "Invalid comment id" });
+    }
+
+    if (!text) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Comment text required" });
+    }
+
+    // ✅ find comment
+    const comment = await Comment.findOne({
+      _id: commentId,
+      isDeleted: false,
+    });
+
+    if (!comment) {
+      return res.status(404).json({ ok: false, message: "Comment not found" });
+    }
+
+    // ✅ only owner can update
+    if (String(comment.author) !== String(userId)) {
+      return res.status(403).json({ ok: false, message: "Not allowed" });
+    }
+
+    // ✅ update text only
+    comment.text = text;
+    // comment.isEdited = true; // optional (recommended)
+    // comment.editedAt = new Date(); // optional
+
+    await comment.save();
+
+    const updated = await Comment.findById(commentId)
+      .populate("author", "name username profilePic uid")
+      .lean();
+
+    return res.json({
+      ok: true,
+      comment: updated,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "Update failed",
+    });
   }
 };

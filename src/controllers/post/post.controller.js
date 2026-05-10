@@ -59,6 +59,75 @@ export const createPost = async (req, res) => {
     if (!postContentType)
       return res.status(400).json({ message: "Invalid post type" });
 
+    // ✅ STEP: daily post limit check
+    const nowDate = new Date();
+    // ✅ UTC start of day
+    const startOfDay = new Date(
+      Date.UTC(
+        nowDate.getUTCFullYear(),
+        nowDate.getUTCMonth(),
+        nowDate.getUTCDate(),
+        0,
+        0,
+        0,
+      ),
+    );
+
+    // ✅ UTC end of day
+    const endOfDay = new Date(
+      Date.UTC(
+        nowDate.getUTCFullYear(),
+        nowDate.getUTCMonth(),
+        nowDate.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    );
+
+    const todayPostCount = await Post.countDocuments({
+      author: userId,
+      createdAt: {
+        $gte: startOfDay,
+        $lte: endOfDay,
+      },
+    });
+
+    if (todayPostCount >= 20) {
+      return res.status(400).json({
+        success: false,
+        message: "Daily post limit reached (20 posts per day)",
+      });
+    }
+
+    // ✅ STEP: last post cooldown check (5 minutes)
+
+    const FIVE_MINUTES = 5 * 60 * 1000;
+
+    const lastPost = await Post.findOne({ author: userId })
+      .sort({ createdAt: -1 })
+      .select("createdAt");
+
+    if (lastPost) {
+      const now = Date.now();
+      const lastTime = new Date(lastPost.createdAt).getTime();
+
+      const diff = now - lastTime;
+
+      if (diff < FIVE_MINUTES) {
+        const remaining = Math.ceil((FIVE_MINUTES - diff) / 1000);
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+
+
+        return res.status(400).json({
+          success: false,
+          message: `Wait ${minutes}m ${seconds}s before next post`,
+        });
+      }
+    }
+
     const safePrivacy = ["public", "followers", "only_me"].includes(privacy)
       ? privacy
       : "public";

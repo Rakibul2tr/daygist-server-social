@@ -1,7 +1,7 @@
 // src/modules/groups/group.routes.js
 import { Router } from "express";
 import { authGuard } from "../../middleware/authMiddleware.js";
-import { createGroup, getForYouGroups, getGroupDetails, getGroupJoinRequests, getGroupMembers, getMyYourGroups, joinGroup, updateGroupMemberStatus } from "../../controllers/group/group.controller.js";
+import { createGroup, deleteGroup, getForYouGroups, getGroupDetails, getGroupJoinRequests, getGroupMembers, getMyYourGroups, joinGroup, updateGroupMemberStatus } from "../../controllers/group/group.controller.js";
 
 
 const router = Router();
@@ -20,6 +20,7 @@ router.patch(
 
 // group detail
 router.get("/:groupId/group-details", authGuard, getGroupDetails);
+router.delete("/:groupId/delete", authGuard, deleteGroup);
 
 
 
