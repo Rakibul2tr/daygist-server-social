@@ -89,7 +89,7 @@ export const createOrGetConversation = async (req, res) => {
       console.log("✅ fetched conversation:", conversation?._id);
     }
 
-    // console.log('conversation',conversation);
+    console.log('conversation',conversation);
 
     return res.status(200).json({
       success: true,
@@ -349,5 +349,49 @@ export const rejectRequest = async (req, res) => {
     });
   } catch (e) {
     return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+export const checkConversationExists = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const { otherUserId } = req.params; // বা req.query বা req.body থেকে নিতে পারেন
+    
+
+    if (!me || !otherUserId) {
+      return res.status(400).json({ success: false, message: "ID missing" });
+    }
+
+    // ১-টু-১ কনভারসেশন চেক করা
+    const conversation = await Conversation.findOne({
+      participants: {
+        $all: [
+          new mongoose.Types.ObjectId(String(me)),
+          new mongoose.Types.ObjectId(String(otherUserId)),
+        ],
+        $size: 2,
+      },
+    }).lean();
+    
+
+    if (conversation) {
+      return res.status(200).json({
+        success: true,
+        exists: true,
+        message: "Conversation already exists",
+        conversationId: conversation._id,
+      });
+    } else {
+      return res.status(200).json({
+        success: true,
+        exists: false,
+        message: "No conversation found",
+      });
+    }
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      message: e.message || "Internal server error",
+    });
   }
 };

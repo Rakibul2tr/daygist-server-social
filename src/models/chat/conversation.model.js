@@ -71,7 +71,7 @@ conversationSchema.pre("save", function () {
  * Same 2 user আবার নতুন conversation না বানাতে.
  * Since array exact-order issue থাকতে পারে, controller-এ sorted order use করবে.
  */
-conversationSchema.index({ participants: 1 }, { unique: true });
+conversationSchema.index({ participants: 1 });
 
 /**
  * Inbox sorting speed

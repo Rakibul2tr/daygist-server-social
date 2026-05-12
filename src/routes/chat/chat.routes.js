@@ -1,6 +1,7 @@
 import express from "express";
 import {
   acceptConversationRequest,
+  checkConversationExists,
   createOrGetConversation,
   getConversationById,
   getMyConversations,
@@ -27,6 +28,11 @@ router.patch(
   "/conversations/accept/:conversationId",
   authGuard,
   acceptConversationRequest,
+);
+router.get(
+  "/conversations/:otherUserId/checkExisting",
+  authGuard,
+  checkConversationExists,
 );
 
 

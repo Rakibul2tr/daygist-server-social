@@ -333,7 +333,7 @@ export const getFollowing = async (req, res) => {
 export const followStatus = async (req, res) => {
   try {
     const me = req.user?._id;
-    const targetId = req.params.id;
+    const targetId = req.params.userId || req.params.id;
 
     if (!me) return res.status(401).json({ message: "Unauthorized" });
     if (!mongoose.isValidObjectId(targetId))
