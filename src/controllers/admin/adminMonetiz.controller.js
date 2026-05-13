@@ -28,74 +28,91 @@ export const adminListMonetization = async (req, res) => {
   }
 };
 
-export const adminApproveMonetization = async (req, res) => {
+export const getSingleMonetization = async (req, res) => {
   try {
-    const adminId = req.user?._id;
-    const appId = req.params.id;
+    const { id } = req.params; // ইউআরএল থেকে আইডি নিবে
 
-    const app = await Monetization.findById(appId);
-    if (!app)
-      return res
-        .status(404)
-        .json({ ok: false, message: "Application not found" });
+    const item = await Monetization.findById(id)
+      .populate("userId", "name username avatar email cover")
+      .lean();
 
-    if (app.status == "approved") {
-      return res
-        .status(400)
-        .json({ ok: false, message: `Already ${app.status}` });
+    if (!item) {
+      return res.status(404).json({
+        ok: false,
+        message: "Monetization request not found",
+      });
     }
 
-    app.status = "approved";
-    app.reviewedBy = adminId;
-    app.reviewedAt = new Date();
-    app.rejectReason = null;
-    await app.save();
-
-    // ✅ make user monetized
-    await User.findByIdAndUpdate(app.userId, {
-      $set: { monetizationStatus: "approved", isMonetization: true },
+    return res.status(200).json({
+      ok: true,
+      data: item,
     });
-
-    return res.json({ ok: true, message: "Approved", data: app });
   } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, message: e?.message || "Approve failed" });
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "Internal server error",
+    });
   }
 };
 
-export const adminRejectMonetization = async (req, res) => {
+
+export const adminMonetizationStatus = async (req, res) => {
   try {
     const adminId = req.user?._id;
     const appId = req.params.id;
-    const reason = String(req.body?.reason || "").trim();
+    // ✅ ফ্রন্টএন্ড বডি থেকে স্ট্যাটাস এবং রিজেক্ট রিজন নিন
+    const { status, rejectReason } = req.body;
+
+    // ভ্যালিডেশন চেক
+    const validStatuses = ["approved", "pending", "rejected"];
+    if (!status || !validStatuses.includes(status)) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Invalid status provided" });
+    }
 
     const app = await Monetization.findById(appId);
-    if (!app)
+    if (!app) {
       return res
         .status(404)
         .json({ ok: false, message: "Application not found" });
-
-    if (app.status == "rejected") {
-      return res
-        .status(400)
-        .json({ ok: false, message: `Already Rejected for ${app.rejectReason}` });
     }
 
-    app.status = "rejected";
+    // অলরেডি সেম স্ট্যাটাস থাকলে এরর রিটার্ন করবে
+    if (app.status === status) {
+      return res
+        .status(400)
+        .json({ ok: false, message: `Application is already ${status}` });
+    }
+
+    // ✅ ডাইনামিক স্ট্যাটাস আপডেট
+    app.status = status;
     app.reviewedBy = adminId;
     app.reviewedAt = new Date();
-    app.rejectReason = reason || "Rejected";
+    app.rejectReason =
+      status === "rejected" ? rejectReason || "Rejected by admin" : null;
     await app.save();
 
+    // ✅ ইউজারের মনিটাইজেশন প্রোফাইল স্ট্যাটাস সিঙ্ক করা
+    const isMonetized = status === "approved";
     await User.findByIdAndUpdate(app.userId, {
-      $set: { monetizationStatus: "rejected", isMonetization: false },
+      $set: {
+        monetizationStatus: status, // approved, pending, rejected
+        isMonetization: isMonetized, // true বা false হবে
+      },
     });
 
-    return res.json({ ok: true, message: `Rejected for ${reason}`, data: app });
+    return res.json({
+      ok: true,
+      message: `Status updated to ${status}`,
+      data: app,
+    });
   } catch (e) {
     return res
       .status(500)
-      .json({ ok: false, message: e?.message || "Reject failed" });
+      .json({ ok: false, message: e?.message || "Status update failed" });
   }
 };
+
+
+

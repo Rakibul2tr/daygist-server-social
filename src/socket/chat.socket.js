@@ -24,6 +24,8 @@ export const setupChatSocket = (io, socket) => {
     if (!userId) return;
 
     const safeUserId = String(userId);
+    console.log('user id',safeUserId);
+    
 
     const timer = disconnectTimers.get(safeUserId);
     if (timer) {

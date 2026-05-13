@@ -10,6 +10,7 @@ import {
   googleAdminLoginOrCreate,
   adminUpdateUserControls,
   adminOverview,
+  getUsersByRole,
 } from "../../controllers/admin/adminUser.controller.js";
 
 const router = express.Router();
@@ -30,8 +31,8 @@ router.patch(
 );
 
 router.get("/overview-info", authGuard, isAdmin, adminOverview);
-// role
-// router.patch("/users/:id/role", authGuard, isAdmin, adminSetUserRole);
+// role based user fetching
+router.get("/users-by-role", authGuard, isAdmin, getUsersByRole);
 
 // // block / unblock
 // router.patch("/users/:id/block", authGuard, isAdmin, adminSetUserBlocked);

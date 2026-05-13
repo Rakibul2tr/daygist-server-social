@@ -79,10 +79,11 @@ export const googleAdminLoginOrCreate = async (req, res) => {
       }
 
       // ✅ force role as ADMIN if needed
-      user.role = user.role || "ADMIN";
+      user.role = "ADMIN";
       user.accountStatus = "active";
 
-      await user.save();
+     const res= await user.save();
+     
     }
 
     const token = generateToken({
@@ -90,6 +91,8 @@ export const googleAdminLoginOrCreate = async (req, res) => {
       role: user.role,
       profileCompleted: user.profileCompleted,
     });
+    console.log('admin user',user);
+    
 
     return res.status(200).json({
       success: true,
@@ -321,6 +324,8 @@ export const adminOverview = async (req, res) => {
       sellerUsers,
       monetizationUsers,
       deletedUsers,
+      adminCount, // নতুন অ্যাডমিন কাউন্ট
+      moderatorCount, // নতুন মডারেটর কাউন্ট
     ] = await Promise.all([
       User.countDocuments({ isDeleted: { $ne: true } }),
       User.countDocuments({
@@ -342,6 +347,8 @@ export const adminOverview = async (req, res) => {
       User.countDocuments({
         isDeleted: true,
       }),
+      User.countDocuments({ isDeleted: { $ne: true }, role: "ADMIN" }),
+      User.countDocuments({ isDeleted: { $ne: true }, role: "MODERATOR" }),
     ]);
 
     return res.status(200).json({
@@ -354,12 +361,56 @@ export const adminOverview = async (req, res) => {
         sellerUsers,
         monetizationUsers,
         deletedUsers,
+        adminCount,
+        moderatorCount,
       },
     });
   } catch (e) {
     return res.status(500).json({
       ok: false,
       message: e?.message || "Failed to fetch admin overview",
+    });
+  }
+};
+
+export const getUsersByRole = async (req, res) => {
+  try {
+    // ১. কুয়েরি প্যারামস থেকে রোল এবং পেজিনেশন ডাটা নিন
+    const { role, page = 1, limit = 10 } = req.query;
+
+    // ২. ফিল্টার অবজেক্ট তৈরি (যদি রোল পাঠানো হয় তবেই সেটা দিয়ে ফিল্টার করবে)
+    const filter = {};
+    if (role) {
+      filter.role = role.toUpperCase(); // API তে ছোট হাতের লিখলেও বড় হাতের করে নিবে (যেমন: user -> USER)
+    }
+
+    // ৩. ডাটাবেস থেকে ডাটা ফেচ করা
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const users = await User.find(filter)
+      .sort({ createdAt: -1 }) // নতুন ইউজার আগে দেখাবে
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // ৪. টোটাল ইউজারের সংখ্যা বের করা (পেজিনেশনের জন্য দরকার)
+    const totalUsers = await User.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      pagination: {
+        totalUsers,
+        totalPages: Math.ceil(totalUsers / limit),
+        currentPage: parseInt(page),
+      },
+      data: users,
+    });
+  } catch (error) {
+    console.error("Error in getUsersByRole:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error: Could not fetch users",
+      error: error.message,
     });
   }
 };
