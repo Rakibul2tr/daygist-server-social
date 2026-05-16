@@ -145,6 +145,44 @@ export const setupChatSocket = (io, socket) => {
     }
   });
 
+  // ✅ MESSAGE REACTION
+  socket.on("message-reaction",({ conversationId, messageId, reactions, receiverId }) => {
+      if (!conversationId || !messageId || !Array.isArray(reactions)) {
+        return;
+      }
+
+      // receiver devices
+      const receiverSet = onlineUsers.get(String(receiverId));
+
+      if (receiverSet && receiverSet.size > 0) {
+        receiverSet.forEach((sid) => {
+          io.to(sid).emit("message-reaction-updated", {
+            conversationId: String(conversationId),
+            messageId: String(messageId),
+            reactions,
+          });
+        });
+      }
+
+      // sender all devices
+      const senderId = socketUsers.get(socket.id);
+
+      if (senderId) {
+        const senderSet = onlineUsers.get(String(senderId));
+
+        if (senderSet && senderSet.size > 0) {
+          senderSet.forEach((sid) => {
+            io.to(sid).emit("message-reaction-updated", {
+              conversationId: String(conversationId),
+              messageId: String(messageId),
+              reactions,
+            });
+          });
+        }
+      }
+    },
+  );
+
   // ✅ CHECK ONLINE
   socket.on("check-user-online", ({ userId }) => {
     if (!userId) return;

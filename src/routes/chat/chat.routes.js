@@ -13,6 +13,8 @@ import {
   markMessagesSeen,
   deleteMessage,
   getChatOnlineUnion,
+  handleMessageReaction,
+  editMessage,
 } from "../../controllers/chat/message.controller.js";
 import { authGuard } from "../../middleware/authMiddleware.js";
 
@@ -46,11 +48,13 @@ router.get("/unseenCount", authGuard, getTotalUnseenCount);
 router.get("/messages/:conversationId", authGuard, getMessagesByConversation);
 router.post("/messages/send", authGuard, sendMessage);
 router.patch("/messages/seen/:conversationId", authGuard, markMessagesSeen);
+router.patch("/reaction/:messageId", authGuard, handleMessageReaction);
+router.patch("/message/:messageId", authGuard, editMessage);
 
 
 /**
  * Optional
  */
-router.delete("/messages/:messageId", authGuard, deleteMessage);
+router.delete("/message/:messageId", authGuard, deleteMessage);
 
 export default router;

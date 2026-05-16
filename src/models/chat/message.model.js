@@ -78,6 +78,42 @@ const messageSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    reactions: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        emoji: {
+          type: String,
+          required: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+      { _id: false },
+    ],
+    replyTo: {
+      message: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message",
+        default: null,
+      },
+
+      text: {
+        type: String,
+        default: "",
+      },
+
+      sender: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+    },
 
     delivered: {
       type: Boolean,
@@ -120,6 +156,7 @@ messageSchema.pre("validate", function () {
 
 messageSchema.index({ conversationId: 1, createdAt: -1 });
 messageSchema.index({ conversationId: 1, receiver: 1, seen: 1 });
+messageSchema.index({ _id: 1, "reactions.user": 1 });
 
 export default mongoose.models.Message ||
   mongoose.model("Message", messageSchema);

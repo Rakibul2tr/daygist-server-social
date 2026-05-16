@@ -53,280 +53,7 @@ const ensureParticipant = async (conversationId, userId) => {
   return { ok: true, conversation };
 };
 
-
-
-
-
-
-// /**
-//  * POST /messages/send
-//  * body:
-//  * {
-//  *   conversationId,   // optional if otherUserId given
-//  *   otherUserId,      // optional if conversationId given
-//  *   text,
-//  *   messageType,      // text | image | voice
-//  *   media: {
-//  *     key,
-//  *     url,
-//  *     provider
-//  *   },
-//  *   mediaMeta: {
-//  *     duration,
-//  *     size,
-//  *     mimeType
-//  *   }
-//  * }
-//  */
-// export const sendMessage = async (req, res) => {
-//   const session = await mongoose.startSession();
-
-//   try {
-//     session.startTransaction();
-
-//     const me = req.user?._id;
-
-//     const {
-//       conversationId,
-//       otherUserId,
-//       text = "",
-//       messageType = "text",
-//       media = {},
-//       mediaMeta = {},
-//     } = req.body;
-
-//     if (!me) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       return res.status(401).json({
-//         success: false,
-//         message: "Unauthorized",
-//       });
-//     }
-
-//     if (!["text", "image", "voice"].includes(messageType)) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid messageType",
-//       });
-//     }
-
-//     if (messageType === "text" && !String(text).trim()) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       return res.status(400).json({
-//         success: false,
-//         message: "Text message cannot be empty",
-//       });
-//     }
-
-//     if (
-//       (messageType === "image" || messageType === "voice") &&
-//       !String(media?.url || "").trim()
-//     ) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       return res.status(400).json({
-//         success: false,
-//         message: `${messageType} message requires media.url`,
-//       });
-//     }
-
-//     let conversation = null;
-//     let receiverId = null;
-
-//     /**
-//      * Case A: conversationId provided
-//      */
-//     if (conversationId) {
-//       if (!mongoose.Types.ObjectId.isValid(conversationId)) {
-//         await session.abortTransaction();
-//         session.endSession();
-//         return res.status(400).json({
-//           success: false,
-//           message: "Invalid conversationId",
-//         });
-//       }
-
-//       conversation =
-//         await Conversation.findById(conversationId).session(session);
-
-//       if (!conversation) {
-//         await session.abortTransaction();
-//         session.endSession();
-//         return res.status(404).json({
-//           success: false,
-//           message: "Conversation not found",
-//         });
-//       }
-
-//       const isParticipant = conversation.participants.some(
-//         (id) => String(id) === String(me),
-//       );
-
-//       if (!isParticipant) {
-//         await session.abortTransaction();
-//         session.endSession();
-//         return res.status(403).json({
-//           success: false,
-//           message: "You are not allowed to send in this conversation",
-//         });
-//       }
-
-//       const otherParticipant = conversation.participants.find(
-//         (id) => String(id) !== String(me),
-//       );
-
-//       if (!otherParticipant) {
-//         await session.abortTransaction();
-//         session.endSession();
-//         return res.status(400).json({
-//           success: false,
-//           message: "Invalid conversation participants",
-//         });
-//       }
-
-//       receiverId = otherParticipant;
-//     }
-
-//     /**
-//      * Case B: conversationId না থাকলে otherUserId দিয়ে conversation find/create
-//      */
-//     if (!conversation) {
-//       if (!otherUserId) {
-//         await session.abortTransaction();
-//         session.endSession();
-//         return res.status(400).json({
-//           success: false,
-//           message: "Either conversationId or otherUserId is required",
-//         });
-//       }
-
-//       if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
-//         await session.abortTransaction();
-//         session.endSession();
-//         return res.status(400).json({
-//           success: false,
-//           message: "Invalid otherUserId",
-//         });
-//       }
-
-//       if (String(me) === String(otherUserId)) {
-//         await session.abortTransaction();
-//         session.endSession();
-//         return res.status(400).json({
-//           success: false,
-//           message: "You cannot send message to yourself",
-//         });
-//       }
-
-//       receiverId = otherUserId;
-
-//       conversation = await Conversation.findOne({
-//         participants: { $all: [me, otherUserId] },
-//         $expr: { $eq: [{ $size: "$participants" }, 2] },
-//       }).session(session);
-
-//       if (!conversation) {
-//         const created = await Conversation.create(
-//           [
-//             {
-//               participants: [me, otherUserId],
-//               lastMessage: "",
-//               lastMessageType: "text",
-//               lastMessageAt: new Date(),
-//               unreadCount: 0,
-//             },
-//           ],
-//           { session },
-//         );
-
-//         conversation = created[0];
-//       }
-//     }
-
-//     const createdMessages = await Message.create(
-//       [
-//         {
-//           conversationId: conversation._id,
-//           sender: me,
-//           receiver: receiverId,
-
-//           text: messageType === "text" ? String(text).trim() : "",
-
-//           messageType,
-
-//           media:
-//             messageType === "text"
-//               ? { key: "", url: "", provider: "" }
-//               : {
-//                   key: String(media?.key || "").trim(),
-//                   url: String(media?.url || "").trim(),
-//                   provider: String(media?.provider || "wasabi").trim(),
-//                 },
-
-//           mediaMeta:
-//             messageType === "text"
-//               ? { duration: 0, size: 0, mimeType: "" }
-//               : {
-//                   duration: Number(mediaMeta?.duration) || 0,
-//                   size: Number(mediaMeta?.size) || 0,
-//                   mimeType: String(mediaMeta?.mimeType || "").trim(),
-//                 },
-
-//           delivered: false,
-//           seen: false,
-//         },
-//       ],
-//       { session },
-//     );
-
-//     const message = createdMessages[0];
-
-//     conversation.lastMessage =
-//       messageType === "text"
-//         ? String(text).trim()
-//         : messageType === "image"
-//           ? "📷 Image"
-//           : "🎤 Voice";
-
-//     conversation.lastMessageType = messageType;
-//     conversation.lastMessageAt = message.createdAt;
-//     conversation.unreadCount = Number(conversation.unreadCount || 0) + 1;
-
-//     await conversation.save({ session });
-
-//     await session.commitTransaction();
-//     session.endSession();
-
-//     const populatedMessage = await Message.findById(message._id)
-//       .populate("sender", "fullname name username profilePic")
-//       .populate("receiver", "fullname name username profilePic")
-//       .lean();
-
-//     return res.status(201).json({
-//       success: true,
-//       message: "Message sent successfully",
-//       data: {
-//         conversationId: conversation._id,
-//         message: populatedMessage,
-//       },
-//     });
-//   } catch (e) {
-//     await session.abortTransaction();
-//     session.endSession();
-
-//     return res.status(500).json({
-//       success: false,
-//       message: e.message || "Failed to send message",
-//     });
-//   }
-// };
-// /**
-//  * GET /messages/:conversationId?page=1&limit=20
-//  */
+// get massage by pere
 export const getMessagesByConversation = async (req, res) => {
   try {
     const me = req.user?._id;
@@ -368,8 +95,10 @@ export const getMessagesByConversation = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("sender", "fullname name username profilePic")
-        .populate("receiver", "fullname name username profilePic")
+        .populate("sender", "fullname name username avatar")
+        .populate("receiver", "fullname name username avatar")
+        .populate("replyTo.message")
+        .populate("replyTo.sender", "name username avatar")
         .lean(),
       Message.countDocuments(filter),
     ]);
@@ -397,80 +126,11 @@ export const getMessagesByConversation = async (req, res) => {
   }
 };
 
-export const createOrGetConversation = async (req, res) => {
-  try {
-    const me = req.user?._id;
-    const { otherUserId } = req.body;
-
-    if (!me) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    if (!otherUserId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "otherUserId is required" });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid otherUserId" });
-    }
-
-    if (String(me) === String(otherUserId)) {
-      return res.status(400).json({
-        success: false,
-        message: "You cannot create conversation with yourself",
-      });
-    }
-
-    const participants = [me, otherUserId]
-      .map((id) => new mongoose.Types.ObjectId(id))
-      .sort((a, b) => String(a).localeCompare(String(b)));
-
-    let conversation = await Conversation.findOne({
-      participants: { $all: participants },
-      $expr: { $eq: [{ $size: "$participants" }, 2] },
-    }).populate("participants", "name username avatar isOnline");
-
-    if (!conversation) {
-      conversation = await Conversation.create({
-        participants,
-        status: "requested",
-        requestedBy: me,
-        lastMessage: "",
-        lastMessageType: "text",
-        lastMessageAt: new Date(),
-        unreadCount: 0,
-      });
-
-      conversation = await Conversation.findById(conversation._id).populate(
-        "participants",
-        "name username avatar isOnline",
-      );
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Conversation fetched",
-      data: conversation,
-    });
-  } catch (e) {
-    return res.status(500).json({
-      success: false,
-      message: e?.message || "Failed",
-    });
-  }
-};
-
+// send massage with user
 export const sendMessage = async (req, res) => {
-  const session = await mongoose.startSession();
-
   try {
-    session.startTransaction();
-
     const me = req.user?._id;
+
     const {
       conversationId,
       otherUserId,
@@ -478,9 +138,17 @@ export const sendMessage = async (req, res) => {
       messageType = "text",
       media = {},
       mediaMeta = {},
+      replyTo = null,
     } = req.body;
 
-    if (!me) throw new Error("Unauthorized");
+    if (!me) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // ✅ block check
     const isBlocked = await Block.findOne({
       $or: [
         { blocker: me, blocked: otherUserId },
@@ -500,16 +168,25 @@ export const sendMessage = async (req, res) => {
 
     // ===================== CASE A =====================
     if (conversationId) {
-      conversation =
-        await Conversation.findById(conversationId).session(session);
+      conversation = await Conversation.findById(conversationId);
 
-      if (!conversation) throw new Error("Conversation not found");
+      if (!conversation) {
+        return res.status(404).json({
+          success: false,
+          message: "Conversation not found",
+        });
+      }
 
       const isMember = conversation.participants.some(
         (id) => String(id) === String(me),
       );
 
-      if (!isMember) throw new Error("Not allowed");
+      if (!isMember) {
+        return res.status(403).json({
+          success: false,
+          message: "Not allowed",
+        });
+      }
 
       if (conversation.status !== "approved") {
         return res.status(403).json({
@@ -525,7 +202,12 @@ export const sendMessage = async (req, res) => {
 
     // ===================== CASE B =====================
     if (!conversation) {
-      if (!otherUserId) throw new Error("otherUserId required");
+      if (!otherUserId) {
+        return res.status(400).json({
+          success: false,
+          message: "otherUserId required",
+        });
+      }
 
       const participants = [me, otherUserId]
         .map((id) => new mongoose.Types.ObjectId(id))
@@ -534,25 +216,18 @@ export const sendMessage = async (req, res) => {
       conversation = await Conversation.findOne({
         participants: { $all: participants },
         $expr: { $eq: [{ $size: "$participants" }, 2] },
-      }).session(session);
+      });
 
       if (!conversation) {
-        conversation = await Conversation.create(
-          [
-            {
-              participants,
-              status: "requested",
-              requestedBy: me,
-              lastMessage: "",
-              lastMessageType: "text",
-              lastMessageAt: new Date(),
-              unreadCount: 0,
-            },
-          ],
-          { session },
-        );
-
-        conversation = conversation[0];
+        conversation = await Conversation.create({
+          participants,
+          status: "requested",
+          requestedBy: me,
+          lastMessage: "",
+          lastMessageType: "text",
+          lastMessageAt: new Date(),
+          unreadCount: 0,
+        });
       }
 
       if (conversation.status !== "approved") {
@@ -566,23 +241,26 @@ export const sendMessage = async (req, res) => {
     }
 
     // ================= MESSAGE CREATE =================
-    const [msg] = await Message.create(
-      [
-        {
-          conversationId: conversation._id,
-          sender: me,
-          receiver: receiverId,
-          text: messageType === "text" ? text : "",
-          messageType,
-          media,
-          mediaMeta,
-          seen: false,
-          delivered: false,
-        },
-      ],
-      { session },
-    );
+    const msg = await Message.create({
+      conversationId: conversation._id,
+      sender: me,
+      receiver: receiverId,
+      text: messageType === "text" ? text : "",
+      messageType,
+      media,
+      mediaMeta,
+      seen: false,
+      delivered: false,
+      replyTo: replyTo
+        ? {
+            message: replyTo.message,
+            text: replyTo.text,
+            sender: replyTo.sender,
+          }
+        : null,
+    });
 
+    // ✅ update conversation
     conversation.lastMessage =
       messageType === "text"
         ? text
@@ -593,26 +271,77 @@ export const sendMessage = async (req, res) => {
     conversation.lastMessageType = messageType;
     conversation.lastMessageAt = new Date();
 
-    await conversation.save({ session });
+    await conversation.save();
 
-    await session.commitTransaction();
-    session.endSession();
+    // ✅ populate sender receiver
+    const populatedMsg = await Message.findById(msg._id)
+      .populate("sender", "name username avatar")
+      .populate("receiver", "name username avatar");
 
     return res.status(201).json({
       success: true,
       message: "Message sent",
-      data: msg,
+      data: populatedMsg,
     });
   } catch (e) {
-    await session.abortTransaction();
-    session.endSession();
+    console.log("❌ sendMessage error:", e);
 
     return res.status(500).json({
       success: false,
-      message: e.message,
+      message: e.message || "Failed to send message",
     });
   }
 };
+
+// message edit
+export const editMessage = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const { messageId } = req.params;
+    const { text } = req.body;
+
+    if (!me) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const message = await Message.findById(messageId);
+
+    if (!message) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Message not found" });
+    }
+
+    // ✅ only sender can edit
+    if (String(message.sender) !== String(me)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    // ❌ only text message editable
+    if (message.messageType !== "text") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Only text messages can be edited" });
+    }
+
+    message.text = text;
+    message.isEdited = true; // optional flag
+    await message.save();
+
+    const updated = await Message.findById(message._id)
+      .populate("sender", "name username avatar")
+      .populate("receiver", "name username avatar");
+
+    return res.json({
+      success: true,
+      message: "Message updated",
+      data: updated,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 // /**
 //  * PATCH /messages/seen/:conversationId
 //  */
@@ -699,68 +428,68 @@ export const deleteMessage = async (req, res) => {
     const { messageId } = req.params;
 
     if (!me) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
     }
 
     if (!mongoose.Types.ObjectId.isValid(messageId)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid messageId" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid messageId",
+      });
     }
 
     const message = await Message.findById(messageId);
 
-    if (!message || message.isDeleted) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Message not found" });
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found",
+      });
     }
 
+    // ✅ only sender can delete
     if (String(message.sender) !== String(me)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Only sender can delete this message",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Only sender can delete this message",
+      });
     }
 
-    // ✅ capture media info before clearing
+    // ✅ capture media info before delete
     const key = message?.media?.key;
     const provider = message?.media?.provider;
-    // ✅ wasabi delete (best effort)
-    if (
-      !message.isDeleted &&
-      key &&
-      String(provider).toLowerCase() === "wasabi"
-    ) {
+
+    // ✅ delete from wasabi
+    if (key && String(provider).toLowerCase() === "wasabi") {
       try {
         await deleteFromWasabi(String(key));
       } catch (e) {
         console.log("❌ Wasabi delete failed:", e?.message);
-        // continue anyway
       }
     }
 
-    // ✅ DB soft delete
-    message.isDeleted = true;
-    message.text = "";
-    message.media = { key: "", url: "", provider: "" };
-    await message.save();
+    // ✅ HARD DELETE FROM DB
+    await Message.findByIdAndDelete(messageId);
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Message deleted successfully" });
+    return res.status(200).json({
+      success: true,
+      message: "Message deleted successfully",
+      data: {
+        messageId,
+      },
+    });
   } catch (e) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: e.message || "Failed to delete message",
-      });
+    console.log("❌ delete message error", e);
+
+    return res.status(500).json({
+      success: false,
+      message: e.message || "Failed to delete message",
+    });
   }
 };
-
 
 export const getChatOnlineUnion = async (req, res) => {
   try {
@@ -945,161 +674,59 @@ export const getChatOnlineUnion = async (req, res) => {
     });
   }
 };
-// // online member from followers and following
-// // export const getChatOnlineUnion = async (req, res) => {
-// //   try {
-// //     const userId = req.user?._id;
 
-// //     if (!mongoose.isValidObjectId(userId)) {
-// //       return res.status(401).json({ success: false, message: "Unauthorized" });
-// //     }
-// //     console.log('user id',userId);
+// ===================== Message Reaction =====================
+export const handleMessageReaction = async (req, res) => {
+  try {
+    const { emoji } = req.body;
+    const userId = req.user._id; // মিডলওয়্যার (Auth) থেকে আসা লগইন ইউজারের আইডি
+    const { messageId } = req.params;
+    console.log('emoji',emoji,messageId);
+    
 
-// //     const me = toOID(userId);
-// //     console.log('me',me);
+    // ১. ভ্যালিডেশন চেক
+    if (!messageId || !emoji) {
+      return res.status(400).json({
+        success: false,
+        message: "Message ID and emoji are required",
+      });
+    }
 
-// //     const limit = Math.min(Number(req.query.limit) || 20, 50);
-// //     const q = String(req.query.q || "").trim();
-// //     const cursor = parseCursor(req.query.cursor);
+    // ২. আগের রিঅ্যাকশন থাকলে তা রিমুভ (Pull) করা
+    await Message.updateOne(
+      { _id: messageId },
+      { $pull: { reactions: { user: userId } } },
+    );
 
-// //     // cursor shape: { relAt, otherId }
-// //     const cursorFilter = buildRelCursorFilter(cursor);
-// //     // ⚠️ buildRelCursorFilter should expect cursor.otherId not cursor._id (fix below)
-// //     console.log('cursor filter',cursorFilter);
+    // ৩. নতুন রিঅ্যাকশনটি পুশ (Push) করা এবং মেসেজ রিটার্ন করা
+    const updatedMessage = await Message.findByIdAndUpdate(
+      messageId,
+      {
+        $push: {
+          reactions: { user: userId, emoji, createdAt: new Date() },
+        },
+      },
+      { new: true },
+    ).populate("reactions.user", "name avatar"); // ফ্রন্টএন্ডে ইউজারের নাম ও ছবি দেখানোর জন্য
 
-// //     const pipeline = [
-// //       {
-// //         $match: {
-// //           $or: [{ follower: me }, { following: me }],
-// //         },
-// //       },
+    if (!updatedMessage) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found",
+      });
+    }
 
-// //       // other userId + flags
-// //       {
-// //         $project: {
-// //           otherId: {
-// //             $cond: [{ $eq: ["$follower", me] }, "$following", "$follower"],
-// //           },
-// //           isFollowing: { $eq: ["$follower", me] }, // I follow them
-// //           isFollower: { $eq: ["$following", me] }, // they follow me
-// //           createdAt: 1,
-// //         },
-// //       },
-
-// //       // union by otherId
-// //       {
-// //         $group: {
-// //           _id: "$otherId", // ✅ keep otherId here
-// //           isFollowing: { $max: "$isFollowing" },
-// //           isFollower: { $max: "$isFollower" },
-// //           relAt: { $max: "$createdAt" },
-// //         },
-// //       },
-
-// //       // ✅ cursor paging here (relAt + otherId)
-// //       ...(cursorFilter ? [{ $match: cursorFilter }] : []),
-
-// //       // join users
-// //       {
-// //         $lookup: {
-// //           from: "users",
-// //           localField: "_id",
-// //           foreignField: "_id",
-// //           as: "u",
-// //         },
-// //       },
-// //       { $unwind: "$u" },
-
-// //       // ✅ online only
-// //       { $match: { "u.isOnline": true } },
-// //     ];
-
-// //     // optional search
-// //     if (q) {
-// //       pipeline.push({
-// //         $match: {
-// //           $or: [
-// //             { "u.name": { $regex: q, $options: "i" } },
-// //             { "u.username": { $regex: q, $options: "i" } },
-// //           ],
-// //         },
-// //       });
-// //     }
-
-// //     pipeline.push(
-// //       { $sort: { relAt: -1, _id: -1 } },
-// //       { $limit: limit },
-
-// //       {
-// //         $addFields: {
-// //           relation: {
-// //             $cond: [
-// //               { $and: ["$isFollowing", "$isFollower"] },
-// //               "mutual",
-// //               { $cond: ["$isFollowing", "following", "follower"] },
-// //             ],
-// //           },
-// //         },
-// //       },
-
-// //       // ✅ return clean user list + keep cursor fields separately
-// //       {
-// //         $project: {
-// //           userId: "$u._id",
-// //           name: "$u.name",
-// //           username: "$u.username",
-// //           avatarUrl: "$u.avatarUrl",
-// //           avatarKey: "$u.avatarKey",
-// //           provider: { $ifNull: ["$u.avatarProvider", "wasabi"] },
-// //           isOnline: "$u.isOnline",
-// //           lastSeen: "$u.lastSeen",
-
-// //           isFollowing: 1,
-// //           isFollower: 1,
-// //           relation: 1,
-
-// //           // cursor fields
-// //           relAt: 1,
-// //           otherId: "$_id",
-// //         },
-// //       },
-// //     );
-
-// //     const items = await Follow.aggregate(pipeline);
-// //     console.log('items',items);
-
-// //     const nextCursor =
-// //       items.length > 0
-// //         ? {
-// //             relAt: items[items.length - 1].relAt,
-// //             otherId: items[items.length - 1].otherId, // ✅ important
-// //           }
-// //         : null;
-
-// //     // ✅ return clean list
-// //     const userList = items.map((x) => ({
-// //       _id: x.userId,
-// //       name: x.name,
-// //       username: x.username,
-// //       avatarUrl: x.avatarUrl,
-// //       avatarKey: x.avatarKey,
-// //       provider: x.provider,
-// //       isOnline: x.isOnline,
-// //       lastSeen: x.lastSeen,
-// //       isFollowing: x.isFollowing,
-// //       isFollower: x.isFollower,
-// //       relation: x.relation,
-// //       relAt: x.relAt, // optional
-// //     }));
-
-// //     return res.json({ success: true, items: userList, nextCursor });
-// //   } catch (e) {
-// //     return res.status(500).json({
-// //       success: false,
-// //       message: e?.message || "Chat online fetch failed",
-// //     });
-// //   }
-// // };
-
-
-
+    // ৪. সফল রেসপন্স
+    return res.status(200).json({
+      success: true,
+      message: "Reaction updated successfully",
+      data: updatedMessage,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};

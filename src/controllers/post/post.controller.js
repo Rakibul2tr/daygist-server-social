@@ -51,6 +51,8 @@ export const createPost = async (req, res) => {
       // legacy
       medias,
       postType,
+      isRePost,
+      sharedPostId,
     } = req.body || {};
 
     const postContentType = ["text", "image", "video"].includes(type)
@@ -136,7 +138,8 @@ export const createPost = async (req, res) => {
     const isValidUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
 
     // ✅ unify caption/text into one "text"
-    const cleanText = toStr(postContentType === "text" ? text : caption);
+    // const cleanText = toStr(postContentType === "text" ? text : caption);
+    const cleanText = toStr(text || caption);
 
     // ✅ sanitize textStyle (align enum)
     const safeTextStyle =
@@ -172,6 +175,18 @@ export const createPost = async (req, res) => {
     // ✅ build medias
     let safeMedias = [];
 
+     const isPostShared = !!isRePost && !!sharedPostId;
+     if (isPostShared) {
+       const originalPost =
+         await Post.findById(sharedPostId).select("_id isDeleted");
+
+       if (!originalPost || originalPost.isDeleted) {
+         return res.status(404).json({
+           message: "Shared post not found",
+         });
+       }
+     }
+
     if (postContentType === "image") {
       const arr = Array.isArray(images) ? images : [];
       safeMedias = arr
@@ -198,7 +213,8 @@ export const createPost = async (req, res) => {
             : undefined,
         }));
 
-      if (!safeMedias.length && !cleanText) {
+      
+      if (!isPostShared && !safeMedias.length && !cleanText) {
         return res
           .status(400)
           .json({ message: "Image post needs images or caption." });
@@ -241,16 +257,22 @@ export const createPost = async (req, res) => {
         ];
       }
 
-      if (!safeMedias.length && !cleanText) {
-        return res
-          .status(400)
-          .json({ message: "Video post needs video url or caption." });
-      }
+       if (!isPostShared && !safeMedias.length && !cleanText) {
+         return res
+           .status(400)
+           .json({ message: "Video post needs video url or caption." });
+       }
     }
 
-    if (postContentType === "text") {
-      if (!cleanText)
-        return res.status(400).json({ message: "Text post needs text." });
+   
+    const hasText = !!cleanText?.trim();
+    const hasMedia = safeMedias.length > 0;
+    const isRepostValid = isPostShared;
+
+    if (!hasText && !hasMedia && !isRepostValid) {
+      return res.status(400).json({
+        message: "Post must have text, media or shared post",
+      });
       safeMedias = [];
     }
 
@@ -309,12 +331,19 @@ export const createPost = async (req, res) => {
       category: safeCategory,
       subCategory: safeSubCategory,
       postType: postType ? postType : "post",
+      isRePost: isPostShared,
+      sharedPostId: isPostShared ? sharedPostId : null,
     });
 
-    const populated = await Post.findById(doc._id).populate(
-      "author",
-      "name username avatar",
-    );
+    const populated = await Post.findById(doc._id)
+    .populate("author","name username avatar")
+    .populate({
+        path: "sharedPostId",
+        populate: [
+          { path: "author", select: "name username avatar" },
+          { path: "groupId", select: "groupName groupAvatar" } 
+        ]
+      });
 
     return res.json({ success: true, post: populated });
   } catch (e) {

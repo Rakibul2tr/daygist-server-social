@@ -42,7 +42,7 @@ const textStyleSchema = new mongoose.Schema(
     fontWeight: { type: String, default: null },
     align: { type: String, enum: ["left", "center"], default: "center" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 /* -------------------------------------------------------------------------- */
@@ -78,6 +78,21 @@ const postSchema = new mongoose.Schema(
       enum: ["public", "friends", "only_me"],
       default: "public",
       index: true,
+    },
+    isRePost: {
+      type: Boolean,
+      default: false,
+    },
+    groupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GroupPost", // আপনার গ্রুপ মডেলের যে নাম (যেমন 'Group'), সেটি দিন
+      default: null,
+    },
+
+    sharedPostId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Post",
+      default: null,
     },
 
     // ✅ caption/text (single field)

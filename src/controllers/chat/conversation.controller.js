@@ -86,10 +86,10 @@ export const createOrGetConversation = async (req, res) => {
         )
         .lean();
 
-      console.log("✅ fetched conversation:", conversation?._id);
+      // console.log("✅ fetched conversation:", conversation?._id);
     }
 
-    console.log('conversation',conversation);
+    // console.log('conversation',conversation);
 
     return res.status(200).json({
       success: true,

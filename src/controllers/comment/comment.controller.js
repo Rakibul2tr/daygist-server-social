@@ -919,13 +919,18 @@ export const createComment = async (req, res) => {
         postOwnerId = post.author;
 
         // ✅ only top-level comment increments post commentCount
-        if (!isReply) {
-          await Post.updateOne(
-            { _id: postId },
-            { $inc: { commentCount: 1 } },
-            { session },
-          );
-        }
+        await Post.updateOne(
+          { _id: postId },
+          { $inc: { commentCount: 1 } },
+          { session },
+        );
+        // if (!isReply) {
+        //   await Post.updateOne(
+        //     { _id: postId },
+        //     { $inc: { commentCount: 1 } },
+        //     { session },
+        //   );
+        // }
       } else {
         const gp = await GroupPost.findOne({
           _id: postId,
@@ -936,13 +941,18 @@ export const createComment = async (req, res) => {
         postOwnerId = gp.authorId;
 
         // ✅ only top-level comment increments group post commentCount
-        if (!isReply) {
-          await GroupPost.updateOne(
-            { _id: postId },
-            { $inc: { "counts.commentCount": 1 } },
-            { session },
-          );
-        }
+        await GroupPost.updateOne(
+          { _id: postId },
+          { $inc: { "counts.commentCount": 1 } },
+          { session },
+        );
+        // if (!isReply) {
+        //   await GroupPost.updateOne(
+        //     { _id: postId },
+        //     { $inc: { "counts.commentCount": 1 } },
+        //     { session },
+        //   );
+        // }
       }
 
       // ✅ parent validation for reply
