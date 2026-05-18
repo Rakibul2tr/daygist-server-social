@@ -19,7 +19,7 @@ const videoViewSchema = new mongoose.Schema(
 );
 
 // ✅ per user per post only once
-videoViewSchema.index({ post: 1, user: 1 }, { unique: true });
+// videoViewSchema.index({ post: 1, user: 1 }, { unique: true });
 
 const VideoView =
   mongoose.models.PostView || mongoose.model("PostView", videoViewSchema);

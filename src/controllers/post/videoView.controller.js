@@ -11,19 +11,14 @@ export const addView = async (req, res) => {
     if (!mongoose.isValidObjectId(postId))
       return res.status(400).json({ message: "Invalid postId" });
 
-    // ✅ try insert view log (unique)
-    let inserted = false;
-    try {
-      await VideoView.create({ post: postId, user: me });
-      inserted = true;
-    } catch (e) {
-      // duplicate => already viewed
-      if (e?.code !== 11000) throw e;
-    }
+    // ✅ every watch save
+    await VideoView.create({
+      post: postId,
+      user: me,
+    });
 
-    if (inserted) {
-      await Post.updateOne({ _id: postId }, { $inc: { viewCount: 1 } });
-    }
+    // ✅ increase every time
+    await Post.updateOne({ _id: postId }, { $inc: { viewCount: 1 } });
 
     return res.json({ success: true, counted: inserted });
   } catch (e) {

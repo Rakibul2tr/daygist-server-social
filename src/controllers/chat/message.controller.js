@@ -491,65 +491,68 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
+// my conversation users online list
 export const getChatOnlineUnion = async (req, res) => {
   try {
     const userId = req.user?._id;
+
     if (!mongoose.isValidObjectId(userId)) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
     }
 
-    const me = toOID(userId);
+    const me = new mongoose.Types.ObjectId(userId);
     const meStr = String(userId);
-
-    // ✅ DEBUG: does follow relation exist?
-    const testCount = await Follow.countDocuments({
-      $or: [
-        { follower: me },
-        { following: me },
-        { follower: meStr },
-        { following: meStr },
-      ],
-    });
-    console.log("follow match count:", testCount);
 
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const q = String(req.query.q || "").trim();
-    const cursor = parseCursor(req.query.cursor);
-    const cursorFilter = buildRelCursorFilter(cursor);
 
-    const usersCollection = User.collection.name; // ✅ correct collection name
+    // -------------------------------
+    // STEP 1: Get conversation users
+    // -------------------------------
+    const myConversations = await Conversation.find({
+      participants: me,
+    }).select("participants");
 
+    const conversationUserIdsSet = new Set();
+
+    myConversations.forEach((c) => {
+      c.participants.forEach((p) => {
+        const id = String(p);
+        if (id !== meStr) {
+          conversationUserIdsSet.add(id);
+        }
+      });
+    });
+
+    const conversationUserIds = Array.from(conversationUserIdsSet).map(
+      (id) => new mongoose.Types.ObjectId(id),
+    );
+
+    if (conversationUserIds.length === 0) {
+      return res.json({
+        success: true,
+        items: [],
+        nextCursor: null,
+      });
+    }
+
+    const usersCollection = User.collection.name;
+
+    // -------------------------------
+    // STEP 2: Aggregation
+    // -------------------------------
     const pipeline = [
+      // only conversation users
       {
         $match: {
-          $or: [
-            { follower: me },
-            { following: me },
-            { follower: meStr },
-            { following: meStr },
-          ],
+          _id: { $in: conversationUserIds },
         },
       },
-      {
-        $project: {
-          otherId: {
-            $cond: [{ $eq: ["$follower", me] }, "$following", "$follower"],
-          },
-          isFollowing: { $eq: ["$follower", me] },
-          isFollower: { $eq: ["$following", me] },
-          createdAt: 1,
-        },
-      },
-      {
-        $group: {
-          _id: "$otherId",
-          isFollowing: { $max: "$isFollowing" },
-          isFollower: { $max: "$isFollower" },
-          relAt: { $max: "$createdAt" },
-        },
-      },
-      ...(cursorFilter ? [{ $match: cursorFilter }] : []),
 
+      // join user details
       {
         $lookup: {
           from: usersCollection,
@@ -560,44 +563,15 @@ export const getChatOnlineUnion = async (req, res) => {
       },
       { $unwind: "$u" },
 
-      {
-        $lookup: {
-          from: "blocks",
-          let: { otherUserId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $or: [
-                    {
-                      $and: [
-                        { $eq: ["$blocker", me] },
-                        { $eq: ["$blocked", "$$otherUserId"] },
-                      ],
-                    },
-                    {
-                      $and: [
-                        { $eq: ["$blocker", "$$otherUserId"] },
-                        { $eq: ["$blocked", me] },
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "blockData",
-        },
-      },
+      // online filter
       {
         $match: {
-          blockData: { $size: 0 }, // ❗ exclude blocked users
+          "u.isOnline": true,
         },
       },
-
-      { $match: { "u.isOnline": true } },
     ];
 
+    // search filter
     if (q) {
       pipeline.push({
         $match: {
@@ -610,19 +584,7 @@ export const getChatOnlineUnion = async (req, res) => {
     }
 
     pipeline.push(
-      { $sort: { relAt: -1, _id: -1 } },
       { $limit: limit },
-      {
-        $addFields: {
-          relation: {
-            $cond: [
-              { $and: ["$isFollowing", "$isFollower"] },
-              "mutual",
-              { $cond: ["$isFollowing", "following", "follower"] },
-            ],
-          },
-        },
-      },
       {
         $project: {
           userId: "$u._id",
@@ -632,48 +594,208 @@ export const getChatOnlineUnion = async (req, res) => {
           avatar: "$u.avatar",
           isOnline: "$u.isOnline",
           lastSeen: "$u.lastSeen",
-          isFollowing: 1,
-          isFollower: 1,
-          relation: 1,
-          relAt: 1,
-          otherId: "$_id",
         },
       },
     );
 
-    const items = await Follow.aggregate(pipeline);
+    const items = await Conversation.aggregate(pipeline);
 
-    const nextCursor =
-      items.length > 0
-        ? {
-            relAt: items[items.length - 1].relAt,
-            otherId: items[items.length - 1].otherId,
-          }
-        : null;
-
-    const userList = items.map((x) => ({
-      _id: x.userId,
-      name: x.name,
-      username: x.username,
-      cover: x.cover,
-      avatar: x.avatar,
-      isOnline: x.isOnline,
-      lastSeen: x.lastSeen,
-      isFollowing: x.isFollowing,
-      isFollower: x.isFollower,
-      relation: x.relation,
-      relAt: x.relAt,
-    }));
-
-    return res.json({ success: true, items: userList, nextCursor });
+    return res.json({
+      success: true,
+      items,
+      nextCursor: null,
+    });
   } catch (e) {
-    console.log("❌ controller error:", e); // ✅ add this
+    console.log("❌ controller error:", e);
     return res.status(500).json({
       success: false,
       message: e?.message || "Chat online fetch failed",
     });
   }
 };
+// export const getChatOnlineUnion = async (req, res) => {
+//   try {
+//     const userId = req.user?._id;
+//     if (!mongoose.isValidObjectId(userId)) {
+//       return res.status(401).json({ success: false, message: "Unauthorized" });
+//     }
+
+//     const me = toOID(userId);
+//     const meStr = String(userId);
+
+//     // ✅ DEBUG: does follow relation exist?
+//     const testCount = await Follow.countDocuments({
+//       $or: [
+//         { follower: me },
+//         { following: me },
+//         { follower: meStr },
+//         { following: meStr },
+//       ],
+//     });
+//     console.log("follow match count:", testCount);
+
+//     const limit = Math.min(Number(req.query.limit) || 20, 50);
+//     const q = String(req.query.q || "").trim();
+//     const cursor = parseCursor(req.query.cursor);
+//     const cursorFilter = buildRelCursorFilter(cursor);
+
+//     const usersCollection = User.collection.name; // ✅ correct collection name
+
+//     const pipeline = [
+//       {
+//         $match: {
+//           $or: [
+//             { follower: me },
+//             { following: me },
+//             { follower: meStr },
+//             { following: meStr },
+//           ],
+//         },
+//       },
+//       {
+//         $project: {
+//           otherId: {
+//             $cond: [{ $eq: ["$follower", me] }, "$following", "$follower"],
+//           },
+//           isFollowing: { $eq: ["$follower", me] },
+//           isFollower: { $eq: ["$following", me] },
+//           createdAt: 1,
+//         },
+//       },
+//       {
+//         $group: {
+//           _id: "$otherId",
+//           isFollowing: { $max: "$isFollowing" },
+//           isFollower: { $max: "$isFollower" },
+//           relAt: { $max: "$createdAt" },
+//         },
+//       },
+//       ...(cursorFilter ? [{ $match: cursorFilter }] : []),
+
+//       {
+//         $lookup: {
+//           from: usersCollection,
+//           localField: "_id",
+//           foreignField: "_id",
+//           as: "u",
+//         },
+//       },
+//       { $unwind: "$u" },
+
+//       {
+//         $lookup: {
+//           from: "blocks",
+//           let: { otherUserId: "$_id" },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $or: [
+//                     {
+//                       $and: [
+//                         { $eq: ["$blocker", me] },
+//                         { $eq: ["$blocked", "$$otherUserId"] },
+//                       ],
+//                     },
+//                     {
+//                       $and: [
+//                         { $eq: ["$blocker", "$$otherUserId"] },
+//                         { $eq: ["$blocked", me] },
+//                       ],
+//                     },
+//                   ],
+//                 },
+//               },
+//             },
+//           ],
+//           as: "blockData",
+//         },
+//       },
+//       {
+//         $match: {
+//           blockData: { $size: 0 }, // ❗ exclude blocked users
+//         },
+//       },
+
+//       { $match: { "u.isOnline": true } },
+//     ];
+
+//     if (q) {
+//       pipeline.push({
+//         $match: {
+//           $or: [
+//             { "u.name": { $regex: q, $options: "i" } },
+//             { "u.username": { $regex: q, $options: "i" } },
+//           ],
+//         },
+//       });
+//     }
+
+//     pipeline.push(
+//       { $sort: { relAt: -1, _id: -1 } },
+//       { $limit: limit },
+//       {
+//         $addFields: {
+//           relation: {
+//             $cond: [
+//               { $and: ["$isFollowing", "$isFollower"] },
+//               "mutual",
+//               { $cond: ["$isFollowing", "following", "follower"] },
+//             ],
+//           },
+//         },
+//       },
+//       {
+//         $project: {
+//           userId: "$u._id",
+//           name: "$u.name",
+//           username: "$u.username",
+//           cover: "$u.cover",
+//           avatar: "$u.avatar",
+//           isOnline: "$u.isOnline",
+//           lastSeen: "$u.lastSeen",
+//           isFollowing: 1,
+//           isFollower: 1,
+//           relation: 1,
+//           relAt: 1,
+//           otherId: "$_id",
+//         },
+//       },
+//     );
+
+//     const items = await Follow.aggregate(pipeline);
+
+//     const nextCursor =
+//       items.length > 0
+//         ? {
+//             relAt: items[items.length - 1].relAt,
+//             otherId: items[items.length - 1].otherId,
+//           }
+//         : null;
+
+//     const userList = items.map((x) => ({
+//       _id: x.userId,
+//       name: x.name,
+//       username: x.username,
+//       cover: x.cover,
+//       avatar: x.avatar,
+//       isOnline: x.isOnline,
+//       lastSeen: x.lastSeen,
+//       isFollowing: x.isFollowing,
+//       isFollower: x.isFollower,
+//       relation: x.relation,
+//       relAt: x.relAt,
+//     }));
+
+//     return res.json({ success: true, items: userList, nextCursor });
+//   } catch (e) {
+//     console.log("❌ controller error:", e); // ✅ add this
+//     return res.status(500).json({
+//       success: false,
+//       message: e?.message || "Chat online fetch failed",
+//     });
+//   }
+// };
 
 // ===================== Message Reaction =====================
 export const handleMessageReaction = async (req, res) => {
