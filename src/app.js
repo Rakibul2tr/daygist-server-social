@@ -29,6 +29,7 @@ import adminGroupRoutes from "./routes/admin/adminGroup.routes.js";
 import adminGroupPostRoutes from "./routes/admin/adminGroupPost.routes.js";
 import adminAdsRoutes from "./routes/admin/adminAds.routes.js"
 import AdminWalletSettings from "./routes/admin/walletSettings.routes.js"
+import adminGeneralVideoRoutes from "./routes/admin/adminGeneralVideo.routes.js";
 
 
 
@@ -74,6 +75,7 @@ app.use("/admin/groups/post", adminGroupPostRoutes);
 app.use("/admin", adminMonetizationRoutes);
 app.use("/admin", adminStoryRoutes);
 app.use("/admin", adminWithdrawRoutes);
+app.use("/admin", adminGeneralVideoRoutes);
 
 
 //admin ads route

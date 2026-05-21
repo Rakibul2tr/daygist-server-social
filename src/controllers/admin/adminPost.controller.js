@@ -2,16 +2,72 @@
 import Post from "../../models/post/post.model.js";
 
 // ✅ Admin: All posts (newest first)
+
 export const adminGetAllPosts = async (req, res) => {
   try {
-    const posts = await Post.find({})
+    // =========================
+    // QUERY PARAMS
+    // =========================
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 20, 1);
+
+    const q = req.query.q?.trim() || "";
+    const type = req.query.type || "all";
+
+    // =========================
+    // FILTER
+    // =========================
+    const filter = {};
+
+    // search
+    if (q) {
+      filter.$or = [
+        { caption: { $regex: q, $options: "i" } },
+        { text: { $regex: q, $options: "i" } },
+        { content: { $regex: q, $options: "i" } },
+      ];
+    }
+
+    // type filter
+    if (type && type !== "all") {
+      filter.type = type;
+    }
+
+    // =========================
+    // TOTAL COUNT
+    // =========================
+    const total = await Post.countDocuments(filter);
+
+    // =========================
+    // POSTS
+    // =========================
+    const posts = await Post.find(filter)
       .sort({ createdAt: -1, _id: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
       .populate("author", "name username avatar profilePic uid isVerified")
       .lean();
 
-    return res.json({ ok: true, data: posts });
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.status(200).json({
+      ok: true,
+
+      data: posts,
+
+      pagination: {
+        total,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+        limit,
+      },
+    });
   } catch (e) {
-    return res.status(500).json({ ok: false, message: e?.message || "Failed" });
+    return res.status(500).json({
+      ok: false,
+      message: e?.message || "Failed",
+    });
   }
 };
 

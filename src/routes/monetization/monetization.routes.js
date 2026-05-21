@@ -2,9 +2,9 @@ import express from "express";
 import { authGuard } from "../../middleware/authMiddleware.js";
 import { isAdmin } from "../../middleware/isAdminMiddleware.js";
 import {
-  adminApproveMonetization,
-  adminListMonetization,
-  adminRejectMonetization,
+  // adminApproveMonetization,
+  // adminListMonetization,
+  // adminRejectMonetization,
   applyMonetization,
   getMyMonetization,
 } from "../../controllers/monetization/monetization.controller.js";

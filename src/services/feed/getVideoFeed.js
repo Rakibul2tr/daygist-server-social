@@ -12,6 +12,7 @@ export async function getVideoFeed({
   cursor,
   category,
   subCategory,
+  search
 }) {
   const take = Math.min(Number(limit) || 20, 50);
 
@@ -63,9 +64,10 @@ export async function getVideoFeed({
   };
 
   // explicit query > interest > no filter
-  if (category || subCategory) {
+  if (category || subCategory||search) {
     if (category) match.category = category;
     if (subCategory) match.subCategory = subCategory;
+    if (search) match.text = search;
   } else if (autoCategories.length || autoSubCats.length) {
     match.$or = [
       autoSubCats.length ? { subCategory: { $in: autoSubCats } } : null,
