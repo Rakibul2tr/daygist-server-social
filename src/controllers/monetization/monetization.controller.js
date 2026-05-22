@@ -96,7 +96,7 @@ export const getMyMonetization = async (req, res) => {
       .lean();
 
 
-      console.log('app',app);
+      // console.log('app',app);
       
 
     // wallet auto create if missing

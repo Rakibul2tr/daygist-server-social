@@ -19,6 +19,7 @@ import notificationRoutes from "./routes/notification/notification.routes.js";
 
 
 
+
 // admin
 import adminPostRoutes from "./routes/admin/adminPost.routes.js";
 import adminUserRoutes from "./routes/admin/adminUser.routes.js";
@@ -30,6 +31,7 @@ import adminGroupPostRoutes from "./routes/admin/adminGroupPost.routes.js";
 import adminAdsRoutes from "./routes/admin/adminAds.routes.js"
 import AdminWalletSettings from "./routes/admin/walletSettings.routes.js"
 import adminGeneralVideoRoutes from "./routes/admin/adminGeneralVideo.routes.js";
+import settingRoutes from "./routes/admin/adminSetting.routes.js";
 
 
 
@@ -63,6 +65,7 @@ app.use("/pushNotification", pushNotificationRoutes);
 app.use("/notification", notificationRoutes);
 
 
+
 // user and admin
 app.use("/report", reportPostRoutes);
 
@@ -76,6 +79,7 @@ app.use("/admin", adminMonetizationRoutes);
 app.use("/admin", adminStoryRoutes);
 app.use("/admin", adminWithdrawRoutes);
 app.use("/admin", adminGeneralVideoRoutes);
+app.use("/admin", settingRoutes);
 
 
 //admin ads route

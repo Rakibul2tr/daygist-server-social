@@ -32,6 +32,7 @@ export const googleAdminLoginOrCreate = async (req, res) => {
       "rakibul2tr@gmail.com",
       "owner@gmail.com",
       "dmdhelal@gmail.com",
+      "beyondtraces.official@gmail.com",
     ];
 
     if (!allowedAdminEmails.includes(email)) {
