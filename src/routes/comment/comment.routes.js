@@ -12,7 +12,7 @@ import { authGuard } from "../../middleware/authMiddleware.js";
 const router = express.Router();
 
 // post comments
-router.get("/:postId/comments", getPostComments); // public (or protect if you want)
+router.get("/:postId/comments",authGuard, getPostComments); // public (or protect if you want)
 router.post("/:postId/comments", authGuard, createComment);
 
 // replies

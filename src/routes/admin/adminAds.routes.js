@@ -1,24 +1,26 @@
-
-
 import express from "express";
 import {
-  adminGetAds,
-  adminGetSingleAd,
-  adminUpdateAd,
-  adminSoftDeleteAd,
-  adminHardDeleteAd,
+  createAd,
+  getAllAds,
+  getActiveAds,
+  updateAd,
+  deleteAd,
+  trackAd,
 } from "../../controllers/admin/adminAds.controller.js";
-import { authGuard } from "../../middleware/authMiddleware.js";
-import { isAdmin } from "../../middleware/isAdminMiddleware.js";
+import { authGuard } from "../../middleware/authMiddleware.js"; 
 
 const router = express.Router();
 
-router.use(authGuard, isAdmin);
 
-router.get("/ads", adminGetAds);
-router.get("/ads/:adId", adminGetSingleAd);
-router.patch("/ads/:adId", adminUpdateAd);
-router.patch("/ads/:adId/soft", adminSoftDeleteAd);
-router.delete("/ads/:adId/hard", adminHardDeleteAd);
+router.post("/create", authGuard, createAd);
+router.get("/all", authGuard, getAllAds);
+router.put("/update/:id", authGuard, updateAd);
+router.delete("/delete/:id", authGuard, deleteAd);
 
-export default router; // ✅ VERY IMPORTANT
+
+router.get("/active", getActiveAds);
+
+
+router.post("/track/:id", trackAd);
+
+export default router;

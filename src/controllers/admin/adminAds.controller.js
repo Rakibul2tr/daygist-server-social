@@ -1,144 +1,154 @@
 import mongoose from "mongoose";
-import adsModel from "../../models/ads/ads.model.js";
+import Ad from "../../models/ads/ad.model.js"; // সঠিক পাথ দিন
 
-
-//all get admin route
-export const adminGetAds = async (req, res) => {
+// 🟢 ১. বিজ্ঞাপন তৈরি করা (Create Ad)
+export const createAd = async (req, res) => {
   try {
     const {
-      status = "pending",
-      search = "",
-      page = 1,
-      limit = 10,
-    } = req.query;
+      title,
+      description,
+      adType,
+      media,
+      thumbnail,
+      placement,
+      ctaLink,
+      ctaText,
+      duration,
+      isSkippable,
+      skipAfter,
+      startDate,
+      endDate,
+    } = req.body;
 
-    const q = {
-      isDeleted: false,
-      status,
-    };
-
-    if (search) {
-      q.$or = [
-        { title: new RegExp(search, "i") },
-      ];
+    // ভ্যালিডেশন
+    if (!title || !adType || !media || !media.url || !media.key) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing required fields" });
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const newAd = await Ad.create({
+      title,
+      description,
+      adType,
+      media,
+      thumbnail,
+      placement,
+      ctaLink,
+      ctaText,
+      duration,
+      isSkippable,
+      skipAfter,
+      startDate,
+      endDate,
+    });
 
-    const [items, total] = await Promise.all([
-      adsModel.find(q)
-        .populate("createdBy", "name email")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
+    return res
+      .status(201)
+      .json({ success: true, message: "Ad created successfully", data: newAd });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to create ad",
+      });
+  }
+};
 
-      adsModel.countDocuments(q),
-    ]);
+// 🔵 ২. সব বিজ্ঞাপন লিস্ট দেখা (Get All Ads - Admin Panel এর জন্য)
+export const getAllAds = async (req, res) => {
+  try {
+    const ads = await Ad.find().sort({ createdAt: -1 });
+    return res.json({ success: true, data: ads });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// 🔵 ৩. অ্যাপের ফ্রন্টএন্ড ফিডের জন্য অ্যাক্টিভ বিজ্ঞাপন আনা (Get Active Ads for App)
+export const getActiveAds = async (req, res) => {
+  try {
+    const { placement } = req.query; // home_feed | post_details | popup
+
+    const query = { status: "active" };
+    if (placement) query.placement = placement;
+
+    const ads = await Ad.find(query).sort({ createdAt: -1 });
+    return res.json({ success: true, data: ads });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// 🟡 ৪. বিজ্ঞাপন আপডেট করা (Update Ad)
+export const updateAd = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Ad ID" });
+    }
+
+    const updatedAd = await Ad.findByIdAndUpdate(
+      id,
+      { $set: req.body },
+      { new: true },
+    );
+    if (!updatedAd)
+      return res.status(404).json({ success: false, message: "Ad not found" });
 
     return res.json({
       success: true,
-      items,
-      meta: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-      },
+      message: "Ad updated successfully",
+      data: updatedAd,
     });
-  } catch (e) {
-    res.status(500).json({ message: "Failed to load ads" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-//admin get single ads
-export const adminGetSingleAd = async (req, res) => {
-  const { adId } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(adId))
-    return res.status(400).json({ message: "Invalid ad id" });
-
-  const ad = await adsModel.findById(adId)
-    .populate("createdBy", "name email")
-    .lean();
-
-  if (!ad) return res.status(404).json({ message: "Ad not found" });
-
-  res.json({ success: true, item: ad });
-};
-
-//admin update ads
-export const adminUpdateAd = async (req, res) => {
-  const { adId } = req.params;
-
-  const allow = ["title", "budget", "status"];
-  const update = {};
-
-  for (const k of allow) {
-    if (req.body[k] !== undefined) update[k] = req.body[k];
-  }
-
-  const saved = await adsModel.findByIdAndUpdate(
-    adId,
-    { $set: update },
-    { new: true }
-  );
-
-  if (!saved)
-    return res.status(404).json({ message: "Ad not found" });
-
-  res.json({ success: true, item: saved });
-};
-
-//admin soft delete ads
-export const adminSoftDeleteAd = async (req, res) => {
+// 🔴 ৫. বিজ্ঞাপন ডিলিট করা (Delete Ad)
+export const deleteAd = async (req, res) => {
   try {
-    const { adId } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(adId)) {
-      return res.status(400).json({ message: "Invalid ad id" });
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Ad ID" });
     }
 
-    const saved = await adsModel.findByIdAndUpdate(
-      adId,
-      { $set: { isDeleted: true } },
-      { new: true }
-    );
+    const deletedAd = await Ad.findByIdAndDelete(id);
+    if (!deletedAd)
+      return res.status(404).json({ success: false, message: "Ad not found" });
 
-    if (!saved) {
-      return res.status(404).json({ message: "Ad not found" });
-    }
-
-    res.json({ success: true, message: "Ad deleted" });
-  } catch (e) {
-    res.status(500).json({ message: "Delete failed" });
+    return res.json({ success: true, message: "Ad deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-
-//admin hard delete ads
-export const adminHardDeleteAd = async (req, res) => {
+// 📊 𝖹. বিজ্ঞাপনের ইমপ্রেশন ও ক্লিক ট্র্যাক করা (Track Analytics)
+export const trackAd = async (req, res) => {
   try {
-    const { adId } = req.params;
+    const { id } = req.params;
+    const { action } = req.query; // action can be 'impression' or 'click'
 
-    if (!mongoose.Types.ObjectId.isValid(adId)) {
-      return res.status(400).json({ message: "Invalid ad id" });
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Ad ID" });
     }
 
-    const deleted = await adsModel.findByIdAndDelete(adId);
+    let update = {};
+    if (action === "impression") update = { $inc: { impressions: 1 } };
+    else if (action === "click") update = { $inc: { clicks: 1 } };
+    else
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid action type" });
 
-    if (!deleted) {
-      return res.status(404).json({ message: "Ad not found" });
-    }
-
-    res.json({
+    await Ad.findByIdAndUpdate(id, update);
+    return res.json({
       success: true,
-      message: "Ad permanently removed",
+      message: `Ad ${action} tracked successfully`,
     });
-  } catch (e) {
-    res.status(500).json({ message: "Hard delete failed" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
-
-
-
-

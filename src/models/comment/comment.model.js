@@ -38,6 +38,11 @@ const commentSchema = new mongoose.Schema(
     // counters (future: comment likes / reply count)
     likeCount: { type: Number, default: 0 },
     replyCount: { type: Number, default: 0 },
+    
+    reactionCount: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true },
 );

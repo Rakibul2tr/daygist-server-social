@@ -670,6 +670,7 @@ import GroupPost from "../../models/group/groupPost.model.js";
 import Comment from "../../models/comment/comment.model.js";
 import Notification from "../../models/notification/notification.model.js";
 import { sendPushToUser } from "../../services/push/sendPushToUser.js"; // adjust path
+import CommentReaction from "../../models/comment/commentReeaction.model.js";
 
 /* ------------------------- cursor helpers ------------------------- */
 const parseCursor = (raw) => {
@@ -1066,6 +1067,7 @@ export const getPostComments = async (req, res) => {
   try {
     const postId = String(req.params?.postId || "");
     const type = String(req.query?.type || "post");
+    const me = req.user?._id || null;
 
     if (!mongoose.isValidObjectId(postId)) {
       return res.status(400).json({ ok: false, message: "Invalid post id" });
@@ -1098,6 +1100,36 @@ export const getPostComments = async (req, res) => {
       .limit(limit)
       .populate("author", "name username avatar uid")
       .lean();
+
+    
+    if (me && items.length > 0) {
+      const commentIds = items.map((c) => c._id);
+
+      
+      const userReactions = await CommentReaction.find({
+        user: me,
+        comment: { $in: commentIds },
+      })
+        .select("comment type")
+        .lean();
+
+      const reactionMap = new Map(
+        userReactions.map((r) => [String(r.comment), r.type || "like"]),
+      );
+
+     
+      for (const comment of items) {
+        const cId = String(comment._id);
+        comment.isLiked = reactionMap.has(cId); 
+        comment.reaction = reactionMap.get(cId) || null; 
+      }
+    } else {
+      
+      for (const comment of items) {
+        comment.isLiked = false;
+        comment.reaction = null;
+      }
+    }
 
     const nextCursor =
       items.length > 0

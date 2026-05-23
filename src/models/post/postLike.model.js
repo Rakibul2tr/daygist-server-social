@@ -4,8 +4,14 @@ const postLikeSchema = new mongoose.Schema(
   {
     post: { type: mongoose.Schema.Types.ObjectId, ref: "Post", required: true },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    type: {
+      type: String,
+      required: true,
+      enum: ["like", "love", "haha", "wow", "sad", "angry"], // নির্দিষ্ট অপশন
+      default: "like",
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 postLikeSchema.index({ post: 1, user: 1 }, { unique: true });

@@ -501,17 +501,19 @@ export const getPostById = async (req, res) => {
     }
     let isLiked = false;
     let isShared = false;
+    let reaction = null; 
     let isFollowingAuthor = false;
 
     if (me) {
       const [likedRow, sharedRow, followingRow] = await Promise.all([
-        PostLike.exists({ user: me, post: postId }),
+        PostLike.findOne({ user: me, post: postId }).select("type").lean(),
         PostShare.exists({ user: me, post: postId }),
         Follow.exists({ follower: me, following: post.author?._id }),
       ]);
       // console.log('liked row',likedRow);
 
       isLiked = !!likedRow;
+      reaction = likedRow ? likedRow.type || "like" : null;
       isShared = !!sharedRow;
       isFollowingAuthor = !!followingRow;
     }
@@ -523,6 +525,7 @@ export const getPostById = async (req, res) => {
       post: {
         ...post,
         isLiked,
+        reaction,
         isShared,
         isFollowingAuthor,
       },
@@ -638,8 +641,7 @@ export const unsavePost = async (req, res) => {
 };
 
 export const getSavedPosts = async (req, res) => {
-  console.log("req");
-
+  // console.log("req");
   try {
     const userId = req.user?._id;
     const limit = Math.min(Number(req.query.limit) || 20, 50);

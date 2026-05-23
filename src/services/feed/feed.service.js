@@ -226,7 +226,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
     const [likedRows, sharedRows, gLikedRows, gSharedRows, savedRows] =
       await Promise.all([
         PostLike.find({ user: userId, post: { $in: postIds } })
-          .select("post")
+          .select("post type")
           .lean(),
 
         PostShare.find({ user: userId, post: { $in: postIds } })
@@ -237,7 +237,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
           userId: userId,
           postId: { $in: groupPostIds },
         })
-          .select("postId")
+          .select("postId type")
           .lean(),
 
         GroupPostShare.find({
@@ -259,10 +259,16 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
           .lean(),
       ]);
 
-    const likedSet = new Set(likedRows.map((r) => String(r.post)));
+    // const likedSet = new Set(likedRows.map((r) => String(r.post)));
+     const likedMap = new Map(
+       likedRows.map((r) => [String(r.post), r.type || "like"]),
+     );
     const sharedSet = new Set(sharedRows.map((r) => String(r.post)));
 
-    const gLikedSet = new Set(gLikedRows.map((r) => String(r.postId)));
+    // const gLikedSet = new Set(gLikedRows.map((r) => String(r.postId)));
+    const gLikedMap = new Map(
+      gLikedRows.map((r) => [String(r.postId), r.type || "like"]),
+    );
     const gSharedSet = new Set(gSharedRows.map((r) => String(r.postId)));
 
     const savedPostSet = new Set(
@@ -281,13 +287,15 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
       const id = String(it._id);
 
       if (it.feedType === "post") {
-        it.isLiked = likedSet.has(id);
+        it.isLiked = likedMap.has(id);
+        it.reaction = likedMap.get(id) || null;
         it.isShared = sharedSet.has(id);
 
         // ✅ SAVE
         it.isSave = savedPostSet.has(id);
       } else {
-        it.isLiked = gLikedSet.has(id);
+        it.isLiked = gLikedMap.has(id);
+        it.reaction = gLikedMap.get(id) || null;
         it.isShared = gSharedSet.has(id);
 
         it.isSave = savedGroupSet.has(id);
