@@ -70,10 +70,9 @@ export const getAllAds = async (req, res) => {
 // 🔵 ৩. অ্যাপের ফ্রন্টএন্ড ফিডের জন্য অ্যাক্টিভ বিজ্ঞাপন আনা (Get Active Ads for App)
 export const getActiveAds = async (req, res) => {
   try {
-    const { placement } = req.query; // home_feed | post_details | popup
-
+   const userId = req.user?._id;
+   if(!userId)return res.json({ success: false, message: "user not found" });
     const query = { status: "active" };
-    if (placement) query.placement = placement;
 
     const ads = await Ad.find(query).sort({ createdAt: -1 });
     return res.json({ success: true, data: ads });

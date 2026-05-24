@@ -65,6 +65,7 @@ app.use("/monetization", monetizationRoutes);
 app.use("/withdraw", withdrawRoutes);
 app.use("/pushNotification", pushNotificationRoutes);
 app.use("/notification", notificationRoutes);
+app.use("/users/ads", adminAdsRoutes);
 
 
 
