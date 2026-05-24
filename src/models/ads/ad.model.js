@@ -14,6 +14,7 @@ const adSchema = new mongoose.Schema(
       url: { type: String, required: true },
       key: { type: String, required: true },
       provider: { type: String, default: "wasabi" },
+      
     },
     // ভিডিও অ্যাডের জন্য এক্সট্রা কভার বা থাম্বনেইল (অপশনাল)
     thumbnail: {

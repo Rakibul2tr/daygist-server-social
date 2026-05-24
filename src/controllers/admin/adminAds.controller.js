@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Ad from "../../models/ads/ad.model.js"; // সঠিক পাথ দিন
+import { deleteManyFromWasabi } from "../../services/wbUpload.service.js";
 
 // 🟢 ১. বিজ্ঞাপন তৈরি করা (Create Ad)
 export const createAd = async (req, res) => {
@@ -107,23 +108,51 @@ export const updateAd = async (req, res) => {
   }
 };
 
-// 🔴 ৫. বিজ্ঞাপন ডিলিট করা (Delete Ad)
 export const deleteAd = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // ১. অবজেক্ট আইডি ভ্যালিডেশন
     if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({ success: false, message: "Invalid Ad ID" });
     }
 
-    const deletedAd = await Ad.findByIdAndDelete(id);
-    if (!deletedAd)
+    // ২. ডাটাবেস থেকে আগে অ্যাডটি খুঁজে বের করুন (কী রিমুভ করার জন্য ডাটা লাগবে)
+    const ad = await Ad.findById(id);
+    if (!ad) {
       return res.status(404).json({ success: false, message: "Ad not found" });
+    }
 
-    return res.json({ success: true, message: "Ad deleted successfully" });
+    // ৩. ✅ যদি অ্যাডের ভেতর মিডিয়া অবজেক্ট এবং Wasabi Key থাকে তবে সেটি স্টোরেজ থেকে ডিলিট করবে
+    if (ad.media && ad.media.key) {
+      try {
+        // আপনার মেথডটি যেহেতু অ্যারে রিসিভ করে (deleteMany), তাই কী-টি অ্যারে আকারে পাঠানো হলো
+        const keys = [ad.media.key];
+
+        console.log("Attempting to delete media from Wasabi:", keys);
+        const out = await deleteManyFromWasabi(keys);
+        console.log("Wasabi delete response:", out);
+      } catch (wasabiError) {
+        // কোনো কারণে ওয়াসাবি থেকে ডিলিট ফেল করলেও যেন ডাটাবেস প্রসেস না আটকায় তার জন্য লগ রাখা হলো
+        console.error(
+          "Failed to delete media from Wasabi storage:",
+          wasabiError.message,
+        );
+      }
+    }
+
+    // ৪. এখন ডাটাবেস থেকে বিজ্ঞাপনের ডকুমেন্টটি চিরতরে মুছে ফেলুন
+    await Ad.findByIdAndDelete(id);
+
+    return res.json({
+      success: true,
+      message: "Ad and its media permanently deleted",
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // 📊 𝖹. বিজ্ঞাপনের ইমপ্রেশন ও ক্লিক ট্র্যাক করা (Track Analytics)
 export const trackAd = async (req, res) => {
@@ -152,3 +181,50 @@ export const trackAd = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+
+export const updateAdStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; 
+    
+
+    // ১. অবজেক্ট আইডি ভ্যালিডেশন
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Ad ID" });
+    }
+
+    // ২. স্ট্যাটাস ভ্যালু ভ্যালিডেশন
+    const validStatuses = ["active", "paused", "expired"];
+    if (!status || !validStatuses.includes(status)) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Invalid status value. Use 'active' or 'inactive'.",
+        });
+    }
+
+    // ৩. ডাটাবেসে স্ট্যাটাস আপডেট করা
+    const updatedAd = await Ad.findByIdAndUpdate(
+      id,
+      { $set: { status: status } },
+      { new: true, runValidators: true }, // নতুন আপডেট হওয়া ডাটা রিটার্ন করবে এবং স্কিমা ভ্যালিডেশন চেক করবে
+    );
+
+    if (!updatedAd) {
+      return res.status(404).json({ success: false, message: "Ad not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Ad status successfully updated to ${status}`,
+      data: updatedAd,
+    });
+  } catch (error) {
+    console.error("Error updating ad status:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
