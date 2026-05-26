@@ -20,10 +20,10 @@ router.put("/update/:id", authGuard,isAdmin, updateAd);
 router.delete("/delete/:id", authGuard,isAdmin, deleteAd);
 
 
-router.get("/active", getActiveAds);
+router.get("/active",authGuard, getActiveAds);
 
 
-router.post("/track/:id", trackAd);
+router.post("/track/:id",authGuard, trackAd);
 
 router.patch("/ads/:id/status", authGuard, isAdmin, updateAdStatus);
 
