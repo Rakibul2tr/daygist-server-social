@@ -17,7 +17,7 @@ import monetizationRoutes from "./routes/monetization/monetization.routes.js";
 import withdrawRoutes from "./routes/withdraw/withdraw.routes.js";
 import pushNotificationRoutes from "./routes/push/push.routes.js";
 import notificationRoutes from "./routes/notification/notification.routes.js";
-
+import userAdsRoutes from "./routes/admin/adminAds.routes.js";
 
 
 
@@ -66,7 +66,7 @@ app.use("/monetization", monetizationRoutes);
 app.use("/withdraw", withdrawRoutes);
 app.use("/pushNotification", pushNotificationRoutes);
 app.use("/notification", notificationRoutes);
-app.use("/users/ads", adminAdsRoutes);
+app.use("/users/ads", userAdsRoutes);
 
 
 

@@ -75,6 +75,8 @@ export const getActiveAds = async (req, res) => {
     const query = { status: "active" };
 
     const ads = await Ad.find(query).sort({ createdAt: -1 });
+    console.log('ads',ads);
+    
     return res.json({ success: true, data: ads });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
