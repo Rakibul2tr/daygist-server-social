@@ -1,5 +1,6 @@
 // FILE: src/controllers/user/user.controller.js
 import mongoose from "mongoose";
+import geoip from "geoip-lite";
 import User from "../../models/user/user.model.js";
 import Post from "../../models/post/post.model.js";
 import { verifyGoogleToken } from "../../utils/googleVerify.js";
@@ -110,64 +111,196 @@ export const googleLogin = async (req, res) => {
     });
   }
 };
-// export const googleLogin = async (req, res) => {
-//   try {
-//     const idToken = req.body?.idToken || req.body?.token;
 
-//     if (!idToken) return res.status(400).json({ message: "Token required" });
 
-//     const payload = await verifyGoogleToken(idToken);
-//     const { sub, email, name, picture } = payload || {};
 
-//     if (!sub || !email) {
-//       return res.status(401).json({ message: "Invalid Google token payload" });
-//     }
-
-//     let user = await User.findOne({ googleId: sub });
-
-//     if (!user) {
-//       user = await User.create({
-//         googleId: sub,
-//         email,
-//         name,
-//         avatar: picture,
-//         username: generateUsername(email),
-//       });
-//     }
-
-//     const token = generateToken({
-//       userId: user._id,
-//       profileCompleted: user.profileCompleted,
-//     });
-
-//     return res.json({ success: true, token, user });
-//   } catch (error) {
-//     console.log("verify error:", error?.message || error);
-//     return res.status(401).json({
-//       message: "Invalid Google token",
-//       error: String(error?.message || error),
-//     });
-//   }
-// };
 
 export const completeProfile = async (req, res) => {
   try {
-    const { birthDate, country, age } = req.body;
+    const userId = req.user?._id;
 
-    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
 
-    req.user.birthDate = birthDate;
-    req.user.country = country;
-    req.user.age = age;
-    req.user.isNewUser = true;
+    const body = req.body || {};
+    console.log('body',body);
+    
 
-    await req.user.save();
+    const update = {};
 
-    return res.json({ success: true });
+    // ✅ user selected country
+    if ("name" in body) {
+      update.name = s(body.name).trim();
+    }
+
+    if ("birthDate" in body) {
+      update.birthDate = body.birthDate || null;
+    }
+
+    if ("country" in body) {
+      update.country = String(body.country || "").trim();
+    }
+
+    if ("age" in body) {
+      update.age = Number(body.age) || null;
+    }
+
+    // =========================
+    // ✅ IP থেকে real country বের করা
+    // =========================
+    
+
+    const clientIp =
+      body.ip ||
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.socket?.remoteAddress ||
+      req.ip;
+
+
+    const geo = geoip.lookup(clientIp);
+    console.log("geo", geo);
+
+    // geo.country => BD, IN, US
+    const countryCode = geo?.country || null;
+
+    // ✅ country code => full country name
+    const regionNames = new Intl.DisplayNames(["en"], {
+      type: "region",
+    });
+
+    const realCountry = countryCode ? regionNames.of(countryCode) : null;
+    // console.log("complete profile ip cont", realCountry);
+    
+
+    // ✅ db realCountry field
+    update.realCountry = realCountry;
+
+    // ✅ profile complete
+    update.isNewUser = true;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: update,
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    ).lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Profile completed",
+      user: {
+        _id: user._id,
+        name: user.name,
+        birthDate: user.birthDate,
+        country: user.country, // user selected
+        realCountry: user.realCountry, // ip detected
+        age: user.age,
+        isNewUser: user.isNewUser,
+      },
+    });
   } catch (e) {
-    return res.status(500).json({ message: "Profile update failed" });
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "Profile update failed",
+    });
   }
 };
+
+// export const completeProfile = async (req, res) => {
+//   try {
+//     const userId = req.user?._id;
+
+//     if (!userId) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Unauthorized",
+//       });
+//     }
+
+//     const body = req.body || {};
+
+//     const update = {};
+
+//     // ✅ শুধু field পাঠালে update হবে
+//     // ✅ না থাকলে পুরানো data থাকবে
+//     if ("name" in body){
+//       update.name = s(body.name).trim();
+//     }
+
+//     if ("birthDate" in body) {
+//       update.birthDate = body.birthDate || null;
+//     }
+
+//     if ("country" in body) {
+//       update.country = String(body.country || "").trim();
+//     }
+
+//     if ("age" in body) {
+//       update.age = Number(body.age) || null;
+//     }
+
+//     // ✅ profile complete
+//     update.isNewUser = true;
+
+//     // ✅ কিছু না পাঠালে
+//     if (!Object.keys(update).length) {
+//       return res.json({
+//         success: true,
+//         message: "Nothing to update",
+//       });
+//     }
+
+//     const user = await User.findByIdAndUpdate(
+//       userId,
+//       {
+//         $set: update,
+//       },
+//       {
+//         new: true,
+//         runValidators: true,
+//       },
+//     ).lean();
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "User not found",
+//       });
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "Profile completed",
+//       user: {
+//         _id: user._id,
+//         birthDate: user.birthDate,
+//         country: user.country,
+//         age: user.age,
+//         isNewUser: user.isNewUser,
+//       },
+//     });
+//   } catch (e) {
+//     return res.status(500).json({
+//       success: false,
+//       message: e?.message || "Profile update failed",
+//     });
+//   }
+// };
 
 export const getMe = async (req, res) => {
   try {

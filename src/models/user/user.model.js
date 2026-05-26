@@ -54,7 +54,8 @@ const userSchema = new mongoose.Schema(
     username: { type: String, default: null },
 
     birthDate: { type: Date, default: null },
-    country: { type: String, default: null }, // you already had it
+    country: { type: String, default: null },
+    realCountry: { type: String, default: null },
     age: { type: String, default: null },
 
     // ✅ NEW: profile fields (optional)

@@ -50,6 +50,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => res.send("OK Server Running"));
+app.set("trust proxy", true);
 
 app.use("/upload", uploadRoutes);
 app.use("/users", userRoutes);
