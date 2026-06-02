@@ -13,8 +13,15 @@ export const registerPushToken = async (req, res) => {
       return res.status(400).json({ ok: false, message: "Token required" });
 
     await PushToken.updateOne(
-      { userId, token },
-      { $set: { platform, disabled: false, lastSeenAt: new Date() } },
+      { token },
+      {
+        $set: {
+          userId,
+          platform,
+          isEnabled: true,
+          lastSeenAt: new Date(),
+        },
+      },
       { upsert: true },
     );
 
@@ -34,7 +41,14 @@ export const unregisterPushToken = async (req, res) => {
     if (!token)
       return res.status(400).json({ ok: false, message: "Token required" });
 
-    await PushToken.updateOne({ userId, token }, { $set: { disabled: true } });
+    await PushToken.updateOne(
+      { token },
+      {
+        $set: {
+          isEnabled: false,
+        },
+      },
+    );
 
     return res.json({ ok: true });
   } catch (e) {
