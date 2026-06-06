@@ -18,6 +18,7 @@ import withdrawRoutes from "./routes/withdraw/withdraw.routes.js";
 import pushNotificationRoutes from "./routes/push/push.routes.js";
 import notificationRoutes from "./routes/notification/notification.routes.js";
 import userAdsRoutes from "./routes/admin/adminAds.routes.js";
+import adsClickRoutes from "./routes/ads/adClick.routes.js";
 
 
 
@@ -67,6 +68,7 @@ app.use("/withdraw", withdrawRoutes);
 app.use("/pushNotification", pushNotificationRoutes);
 app.use("/notification", notificationRoutes);
 app.use("/users/ads", userAdsRoutes);
+app.use("/videos/ads", adsClickRoutes);
 
 
 

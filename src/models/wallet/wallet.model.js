@@ -13,6 +13,8 @@ const WalletSchema = new mongoose.Schema(
     available: { type: Number, default: 0 }, // withdrawable
     pending: { type: Number, default: 0 }, // processing
     totalEarned: { type: Number, default: 0 }, // lifetime earned
+    coinEarned: { type: Number, default: 0 }, // lifetime earned
+    sentEarned: { type: Number, default: 0 }, // lifetime earned
   },
   { timestamps: true }
 );

@@ -107,6 +107,8 @@ export const getMyMonetization = async (req, res) => {
         available: 0,
         pending: 0,
         totalEarned: 0,
+        coinEarned: 0,
+        sentEarned: 0,
       });
       wallet = created.toObject();
     }
@@ -128,6 +130,8 @@ export const getMyMonetization = async (req, res) => {
             available: Number(wallet.available || 0),
             pending: Number(wallet.pending || 0),
             totalEarned: Number(wallet.totalEarned || 0),
+            coinEarned: Number(wallet.coinEarned || 0),
+            sentEarned: Number(wallet.sentEarned || 0),
           },
           lastWithdraw: lastWithdraw || null,
           app,
