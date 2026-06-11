@@ -9,7 +9,7 @@ const parseCursor = (raw) => {
   }
 };
 
-// GET /feed/videos/general?limit=20&cursor=...
+
 export const getGeneralVideos = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -33,7 +33,7 @@ export const getGeneralVideos = async (req, res) => {
   }
 };
 
-// GET /feed/videos/reels?limit=20&cursor=...
+
 export const getReelsVideos = async (req, res) => {
   try {
     const userId = req.user?._id;

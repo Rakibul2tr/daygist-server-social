@@ -19,6 +19,7 @@ import pushNotificationRoutes from "./routes/push/push.routes.js";
 import notificationRoutes from "./routes/notification/notification.routes.js";
 import userAdsRoutes from "./routes/admin/adminAds.routes.js";
 import adsClickRoutes from "./routes/ads/adClick.routes.js";
+import transactionRoutes from "./routes/transaction/transaction.routes.js";
 
 
 
@@ -69,6 +70,7 @@ app.use("/pushNotification", pushNotificationRoutes);
 app.use("/notification", notificationRoutes);
 app.use("/users/ads", userAdsRoutes);
 app.use("/videos/ads", adsClickRoutes);
+app.use("/transaction", transactionRoutes);
 
 
 

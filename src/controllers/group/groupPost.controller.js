@@ -291,37 +291,7 @@ export const getMyGroupsPost = async (req, res) => {
   }
 };
 
-/**
- * GET /groups/:groupId/posts/:postId
- */
-// export const getSingleGroupPost = async (req, res) => {
-//   try {
-//     const me = req.user?._id;
-//     const { groupId, postId } = req.params;
-//     if (!me) return res.status(401).json({ message: "Unauthorized" });
 
-//     const okMem = await mustBeActiveMember({ me, groupId });
-//     if (!okMem.ok)
-//       return res.status(okMem.code).json({ message: okMem.message });
-
-//     const post = await GroupPost.findOne({
-//       _id: postId,
-//       groupId,
-//       isDeleted: { $ne: true },
-//     })
-//       .populate("authorId", "name avatar")
-//       .populate("groupId", "name coverUrl privacy")
-//       .lean();
-
-//     if (!post) return res.status(404).json({ message: "Post not found" });
-
-//     return res.json({ success: true, item: post });
-//   } catch (e) {
-//     return res
-//       .status(500)
-//       .json({ message: e?.message || "Fetch group post failed" });
-//   }
-// };
 
 export const getSingleGroupPost = async (req, res) => {
   try {
@@ -350,11 +320,16 @@ export const getSingleGroupPost = async (req, res) => {
     // 3. Social Interaction States (Like/Share)
     let isLiked = false;
     let isShared = false;
+    let reaction = null;
 
     // Parallel processing for performance
     // ✅ CHECK FIELD NAMES: userId and postId (Based on your home feed code)
     const [likedRow, sharedRow] = await Promise.all([
-      GroupPostLike.exists({ userId: me, postId: postId }),
+      GroupPostLike.exists({ userId: me, postId: postId })
+        .select("type")
+        .lean(),
+      ,
+      // PostLike.findOne({ user: me, post: postId }).select("type").lean(),
       GroupPostShare.exists({ userId: me, postId: postId }),
     ]);
     console.log('like row',likedRow);
@@ -362,6 +337,7 @@ export const getSingleGroupPost = async (req, res) => {
 
     isLiked = !!likedRow;
     isShared = !!sharedRow;
+    reaction = likedRow ? likedRow.type || "like" : null;
 
     const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/group/${groupId}/post/${post._id}`;
 
@@ -371,6 +347,7 @@ export const getSingleGroupPost = async (req, res) => {
         ...post,
         isLiked,
         isShared,
+        reaction,
       },
       shareLink,
     });

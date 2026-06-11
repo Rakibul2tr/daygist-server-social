@@ -174,7 +174,7 @@ export async function getVideoFeed({
 
     const [likedRows, sharedRows, savedRows] = await Promise.all([
       PostLike.find({ user: userId, post: { $in: postIds } })
-        .select("post")
+        .select("post type")
         .lean(),
       PostShare.find({ user: userId, post: { $in: postIds } })
         .select("post")
@@ -189,13 +189,19 @@ export async function getVideoFeed({
         .lean(),
     ]);
 
-    const likedSet = new Set(likedRows.map((r) => String(r.post)));
+    // const likedSet = new Set(likedRows.map((r) => String(r.post)));
+    const likedMap = new Map(
+      likedRows.map((r) => [String(r.post), r.type || "like"]),
+    );
+    // console.log("likedMap", likedMap);
+    
     const sharedSet = new Set(sharedRows.map((r) => String(r.post)));
     const savedPostSet = new Set(savedRows.map((r) => String(r.targetId)));
 
     for (const p of items) {
       const pid = String(p._id);
-      p.isLiked = likedSet.has(pid);
+      p.isLiked = likedMap.has(pid);
+      p.reaction = likedMap.get(pid) || null;
       p.isShared = sharedSet.has(pid);
 
       // ✅ ADD THIS
@@ -204,6 +210,7 @@ export async function getVideoFeed({
   } else {
     for (const p of items) {
       p.isLiked = false;
+      p.reaction = null;
       p.isShared = false;
       p.isSaved = false; // ✅ ADD
     }

@@ -98,6 +98,7 @@ const userSchema = new mongoose.Schema(
     },
 
     profileCompleted: { type: Boolean, default: false },
+    balance: { type: Number, default: 0 },
     isBlocked: { type: Boolean, default: false },
     blockedAt: { type: Date, default: null },
     isDeleted: { type: Boolean, default: false },

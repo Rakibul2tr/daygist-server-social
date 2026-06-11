@@ -19,6 +19,7 @@ import {
   deleteUserById,
   deleteMyPost,
   updateMyPost,
+  searchUsers,
 } from "../../controllers/user/user.controller.js";
 import { authGuard } from "../../middleware/authMiddleware.js";
 import multer from "multer";
@@ -43,6 +44,7 @@ router.get("/me", authGuard, getMe);            // ✅ no params
 router.get("/all-users",authGuard, isAdmin, getAllUsers);            // ✅ no params
 router.get("/:userId", authGuard, getUserById); // ✅ params needed
 router.delete("/:userId", authGuard, isAdmin, deleteUserById);
+router.post("/search", authGuard, searchUsers);
 // update me 
 router.patch("/me", authGuard, updateMeProfile);
 // ✅ Avatar

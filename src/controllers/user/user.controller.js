@@ -112,9 +112,6 @@ export const googleLogin = async (req, res) => {
   }
 };
 
-
-
-
 export const completeProfile = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -127,7 +124,7 @@ export const completeProfile = async (req, res) => {
     }
 
     const body = req.body || {};
-    console.log('body',body);
+    // console.log('body',body);
     
 
     const update = {};
@@ -595,6 +592,53 @@ export const updateMeProfile = async (req, res) => {
     return res
       .status(500)
       .json({ ok: false, message: e?.message || "Update failed" });
+  }
+};
+
+// @desc    Search users by name, email, or username
+// @route   GET /api/users/search?search=keyword
+// @access  Private/Public (আপনার প্রয়োজন অনুযায়ী)
+export const searchUsers = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    if (!me) return res.status(401).json({ message: "Unauthorized" });
+
+    const { search } = req.body;
+    
+    // যদি কোনো সার্চ কি-ওয়ার্ড না পাঠানো হয়
+    if (!search) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query parameter is required",
+      });
+    }
+
+    // কেস-ইনসেনসিটিভ (Case-insensitive) রেগুলার এক্সপ্রেশন তৈরি
+    const searchRegex = new RegExp(search, 'i');
+
+    // Name, Email, অথবা Username-এর যেকোনো একটির সাথে মিললে ইউজার খুঁজে বের করবে
+    const users = await User.find({
+      $or: [
+        { name: searchRegex },
+        { email: searchRegex },
+        { username: searchRegex }
+      ]
+    })
+    .select('name email username avatar role accountStatus avatar') 
+    .limit(20); 
+
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      data: users
+    });
+
+  } catch (error) {
+    console.error('Error in search api:', error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error. Could not search users.",
+    });
   }
 };
 

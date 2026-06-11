@@ -16,6 +16,12 @@ const GroupPostLikeSchema = new Schema(
       required: true,
       index: true,
     },
+    type: {
+      type: String,
+      required: true,
+      enum: ["like", "love", "haha", "wow", "sad", "angry"], // নির্দিষ্ট অপশন
+      default: "like",
+    },
   },
   { timestamps: true },
 );
