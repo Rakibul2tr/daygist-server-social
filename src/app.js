@@ -21,6 +21,15 @@ import userAdsRoutes from "./routes/admin/adminAds.routes.js";
 import adsClickRoutes from "./routes/ads/adClick.routes.js";
 import transactionRoutes from "./routes/transaction/transaction.routes.js";
 
+// e-commerce 
+
+import ecommerceRoutes from "./routes/ecommerce/ecommerce.routes.js"
+import sellerRoutes from "./routes/ecommerce/seller.routes.js";
+import boostPricingRoutes from "./routes/ecommerce/boostPricing.routes.js";
+import payFeeRoutes from "./routes/ecommerce/payFee.routes.js";
+import orderRoutes from "./routes/ecommerce/order.routes.js";
+
+
 
 
 // admin
@@ -32,6 +41,7 @@ import adminWithdrawRoutes from "./routes/admin/adminWithdraw.routes.js";
 import adminGroupRoutes from "./routes/admin/adminGroup.routes.js";
 import adminGroupPostRoutes from "./routes/admin/adminGroupPost.routes.js";
 import adminAdsRoutes from "./routes/admin/adminAds.routes.js"
+import sellerRoutesForAdmin from "./routes/admin/admin.seller.routes.js";
 import AdminWalletSettings from "./routes/admin/walletSettings.routes.js"
 import adminGeneralVideoRoutes from "./routes/admin/adminGeneralVideo.routes.js";
 import settingRoutes from "./routes/admin/adminSetting.routes.js";
@@ -40,9 +50,6 @@ import settingRoutes from "./routes/admin/adminSetting.routes.js";
 
 // chatting
 import chatRoutes from "./routes/chat/chat.routes.js";
-
-
-
 
 
 
@@ -73,6 +80,17 @@ app.use("/videos/ads", adsClickRoutes);
 app.use("/transaction", transactionRoutes);
 
 
+// e-commerce
+app.use("/e-commerce", ecommerceRoutes);
+app.use("/e-commerce", sellerRoutes);
+app.use("/e-commerce", payFeeRoutes);
+app.use("/e-commerce", orderRoutes);
+
+
+// boost pricing admin and user both
+app.use("/boost-pricing", boostPricingRoutes);
+
+
 
 // user and admin
 app.use("/report", reportPostRoutes);
@@ -88,6 +106,7 @@ app.use("/admin", adminStoryRoutes);
 app.use("/admin", adminWithdrawRoutes);
 app.use("/admin", adminGeneralVideoRoutes);
 app.use("/admin", settingRoutes);
+app.use("/admin",sellerRoutesForAdmin)
 
 
 //admin ads route

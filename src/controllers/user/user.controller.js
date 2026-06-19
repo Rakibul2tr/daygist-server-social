@@ -1352,6 +1352,120 @@ export const getUserReels = async (req, res) => {
 };
 
 // ✅ GET /posts/me/videos/general?limit=20&cursor=...
+
+export const getMyVideos = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    if (!me) return res.status(401).json({ message: "Unauthorized" });
+
+    const take = Math.min(Number(req.query.limit) || 20, 50);
+    const cursor = parseCursor(req.query.cursor);
+    const cursorFilter = buildCursorFilter(cursor);
+
+    const items = await Post.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          author: new mongoose.Types.ObjectId(me),
+          type: "video",
+          category: "general",
+          ...cursorFilter,
+        },
+      },
+      { $sort: { createdAt: -1, _id: -1 } },
+      { $limit: take },
+
+      {
+        $lookup: {
+          from: "users",
+          localField: "author",
+          foreignField: "_id",
+          as: "author",
+        },
+      },
+      { $unwind: "$author" },
+
+      {
+        $lookup: {
+          from: "adclicks",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$post", "$$postId"],
+                },
+              },
+            },
+            {
+              $count: "count",
+            },
+          ],
+          as: "clickStats",
+        },
+      },
+      {
+        $addFields: {
+          canEdit: true,
+          canDelete: true,
+          "author.isMe": true,
+          adClickCount: {
+            $ifNull: [{ $arrayElemAt: ["$clickStats.count", 0] }, 0],
+          },
+        },
+      },
+
+      {
+        $project: {
+          "author._id": 1,
+          "author.name": 1,
+          "author.username": 1,
+          "author.avatar": 1,
+          "author.coverPhoto": 1,
+          "author.isMe": 1,
+
+          type: 1,
+          privacy: 1,
+          text: 1,
+          description: 1,
+          medias: 1,
+          mutedByDefault: 1,
+          loop: 1,
+          videoMode: 1,
+          category: 1,
+          subCategory: 1,
+
+          likeCount: 1,
+          commentCount: 1,
+          saveCount: 1,
+          shareCount: 1,
+          viewCount: 1,
+          adClickCount: 1,
+
+          createdAt: 1,
+          updatedAt: 1,
+          canEdit: 1,
+          canDelete: 1,
+        },
+      },
+    ]);
+
+    const nextCursor =
+      items.length > 0
+        ? {
+            createdAt: items[items.length - 1].createdAt,
+            _id: items[items.length - 1]._id,
+          }
+        : null;
+
+    return res.json({ success: true, items, nextCursor });
+  } catch (e) {
+    return res
+      .status(500)
+      .json({ message: e?.message || "My general videos failed" });
+  }
+};
+
 // export const getMyVideos = async (req, res) => {
 //   try {
 //     const me = req.user?._id;
@@ -1360,6 +1474,15 @@ export const getUserReels = async (req, res) => {
 //     const take = Math.min(Number(req.query.limit) || 20, 50);
 //     const cursor = parseCursor(req.query.cursor);
 //     const cursorFilter = buildCursorFilter(cursor);
+
+//     // ✅ 1. get settings (earning rules)
+//     const setting = await Setting.findOne();
+
+//     const viewRate = setting?.viewRate || 0;
+//     const likeRate = setting?.likeRate || 0;
+//     const shareRate = setting?.shareRate || 0;
+//     const commentRate = setting?.commentRate || 0;
+//     const earningEnabled = setting?.earningEnabled ?? true;
 
 //     const items = await Post.aggregate([
 //       {
@@ -1384,15 +1507,56 @@ export const getUserReels = async (req, res) => {
 //       },
 //       { $unwind: "$author" },
 
+//       // ✅ 2. ADD EARN CALCULATION
 //       {
 //         $addFields: {
 //           canEdit: true,
 //           canDelete: true,
 //           "author.isMe": true,
+
+//           earn: {
+//             $cond: [
+//               { $eq: [earningEnabled, true] },
+//               {
+//                 $round: [
+//                   {
+//                     $add: [
+//                       {
+//                         $multiply: [
+//                           { $divide: ["$viewCount", 1000] },
+//                           viewRate,
+//                         ],
+//                       },
+//                       {
+//                         $multiply: [
+//                           { $divide: ["$likeCount", 1000] },
+//                           likeRate,
+//                         ],
+//                       },
+//                       {
+//                         $multiply: [
+//                           { $divide: ["$shareCount", 1000] },
+//                           shareRate,
+//                         ],
+//                       },
+//                       {
+//                         $multiply: [
+//                           { $divide: ["$commentCount", 1000] },
+//                           commentRate,
+//                         ],
+//                       },
+//                     ],
+//                   },
+//                   3,
+//                 ],
+//               },
+//               0,
+//             ],
+//           },
 //         },
 //       },
 
-      
+//       // ✅ 3. PROJECT FIELDS
 //       {
 //         $project: {
 //           "author._id": 1,
@@ -1419,6 +1583,9 @@ export const getUserReels = async (req, res) => {
 //           shareCount: 1,
 //           viewCount: 1,
 
+//           // ✅ earning field send to frontend
+//           earn: 1,
+
 //           createdAt: 1,
 //           updatedAt: 1,
 //           canEdit: 1,
@@ -1427,6 +1594,22 @@ export const getUserReels = async (req, res) => {
 //       },
 //     ]);
 
+//     const totalEarned = items.reduce((sum, item) => {
+//       return sum + (item.earn || 0);
+//     }, 0);
+
+//     await Wallet.findOneAndUpdate(
+//       { me },
+//       {
+//         $inc: {
+//           available: totalEarned,
+//           totalEarned: totalEarned,
+//         },
+//       },
+//       { new: true },
+//     );
+
+//     // cursor pagination
 //     const nextCursor =
 //       items.length > 0
 //         ? {
@@ -1435,174 +1618,14 @@ export const getUserReels = async (req, res) => {
 //           }
 //         : null;
 
-//     return res.json({ success: true, items, nextCursor });
+//     return res.json({
+//       success: true,
+//       items,
+//       nextCursor,
+//     });
 //   } catch (e) {
-//     return res
-//       .status(500)
-//       .json({ message: e?.message || "My general videos failed" });
+//     return res.status(500).json({
+//       message: e?.message || "My general videos failed",
+//     });
 //   }
 // };
-
-export const getMyVideos = async (req, res) => {
-  try {
-    const me = req.user?._id;
-    if (!me) return res.status(401).json({ message: "Unauthorized" });
-
-    const take = Math.min(Number(req.query.limit) || 20, 50);
-    const cursor = parseCursor(req.query.cursor);
-    const cursorFilter = buildCursorFilter(cursor);
-
-    // ✅ 1. get settings (earning rules)
-    const setting = await Setting.findOne();
-
-    const viewRate = setting?.viewRate || 0;
-    const likeRate = setting?.likeRate || 0;
-    const shareRate = setting?.shareRate || 0;
-    const commentRate = setting?.commentRate || 0;
-    const earningEnabled = setting?.earningEnabled ?? true;
-
-    const items = await Post.aggregate([
-      {
-        $match: {
-          isDeleted: false,
-          author: new mongoose.Types.ObjectId(me),
-          type: "video",
-          category: "general",
-          ...cursorFilter,
-        },
-      },
-      { $sort: { createdAt: -1, _id: -1 } },
-      { $limit: take },
-
-      {
-        $lookup: {
-          from: "users",
-          localField: "author",
-          foreignField: "_id",
-          as: "author",
-        },
-      },
-      { $unwind: "$author" },
-
-      // ✅ 2. ADD EARN CALCULATION
-      {
-        $addFields: {
-          canEdit: true,
-          canDelete: true,
-          "author.isMe": true,
-
-          earn: {
-            $cond: [
-              { $eq: [earningEnabled, true] },
-              {
-                $round: [
-                  {
-                    $add: [
-                      {
-                        $multiply: [
-                          { $divide: ["$viewCount", 1000] },
-                          viewRate,
-                        ],
-                      },
-                      {
-                        $multiply: [
-                          { $divide: ["$likeCount", 1000] },
-                          likeRate,
-                        ],
-                      },
-                      {
-                        $multiply: [
-                          { $divide: ["$shareCount", 1000] },
-                          shareRate,
-                        ],
-                      },
-                      {
-                        $multiply: [
-                          { $divide: ["$commentCount", 1000] },
-                          commentRate,
-                        ],
-                      },
-                    ],
-                  },
-                  3,
-                ],
-              },
-              0,
-            ],
-          },
-        },
-      },
-
-      // ✅ 3. PROJECT FIELDS
-      {
-        $project: {
-          "author._id": 1,
-          "author.name": 1,
-          "author.username": 1,
-          "author.avatar": 1,
-          "author.coverPhoto": 1,
-          "author.isMe": 1,
-
-          type: 1,
-          privacy: 1,
-          text: 1,
-          description: 1,
-          medias: 1,
-          mutedByDefault: 1,
-          loop: 1,
-          videoMode: 1,
-          category: 1,
-          subCategory: 1,
-
-          likeCount: 1,
-          commentCount: 1,
-          saveCount: 1,
-          shareCount: 1,
-          viewCount: 1,
-
-          // ✅ earning field send to frontend
-          earn: 1,
-
-          createdAt: 1,
-          updatedAt: 1,
-          canEdit: 1,
-          canDelete: 1,
-        },
-      },
-    ]);
-
-    const totalEarned = items.reduce((sum, item) => {
-      return sum + (item.earn || 0);
-    }, 0);
-
-    await Wallet.findOneAndUpdate(
-      { me },
-      {
-        $inc: {
-          available: totalEarned,
-          totalEarned: totalEarned,
-        },
-      },
-      { new: true },
-    );
-
-    // cursor pagination
-    const nextCursor =
-      items.length > 0
-        ? {
-            createdAt: items[items.length - 1].createdAt,
-            _id: items[items.length - 1]._id,
-          }
-        : null;
-
-    return res.json({
-      success: true,
-      items,
-      nextCursor,
-    });
-  } catch (e) {
-    return res.status(500).json({
-      message: e?.message || "My general videos failed",
-    });
-  }
-};
