@@ -15,8 +15,8 @@ router.post("/:userId", authGuard, followUser);
 router.delete("/:userId", authGuard, unfollowUser);
 
 // lists (public)
-router.get("/:userId/followers", getFollowers);
-router.get("/:userId/following", getFollowing);
+router.get("/:userId/followers",authGuard, getFollowers);
+router.get("/:userId/following",authGuard, getFollowing);
 
 // optional
 router.get("/:userId/status", authGuard, followStatus);

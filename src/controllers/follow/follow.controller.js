@@ -25,7 +25,7 @@ export const followUser = async (req, res) => {
     const r = await Follow.updateOne(
       { follower: me, following: targetId },
       { $setOnInsert: { follower: me, following: targetId } },
-      { upsert: true }
+      { upsert: true },
     );
 
     // নতুন করে follow হলে counters বাড়াবে
@@ -70,11 +70,11 @@ export const unfollowUser = async (req, res) => {
  * followers = যারা :id user কে follow করে
  */
 export const getFollowers = async (req, res) => {
-    // console.log("followers param:", req.params);
-
   try {
     const me = req.user?._id; // optional (guest হলে null থাকতে পারে)
-     const userId = req.params.userId || req.params.id;
+    const userId = req.params.userId || req.params.id;
+    console.log("me =", me);
+    console.log("userId =", userId);
 
     if (!mongoose.isValidObjectId(userId)) {
       return res
@@ -132,48 +132,51 @@ export const getFollowers = async (req, res) => {
 
     // ✅ compute isFollowing (me follows this follower user?)
     // me -> following = u._id
-    // if (me) {
-    //   pipeline.push(
-    //     {
-    //       $lookup: {
-    //         from: "follows",
-    //         let: { personId: "$u._id" },
-    //         pipeline: [
-    //           {
-    //             $match: {
-    //               $expr: {
-    //                 $and: [
-    //                   { $eq: ["$follower", toOID(me)] },
-    //                   { $eq: ["$following", "$$personId"] },
-    //                 ],
-    //               },
-    //             },
-    //           },
-    //           { $project: { _id: 1 } },
-    //           { $limit: 1 },
-    //         ],
-    //         as: "meRel",
-    //       },
-    //     },
-    //     {
-    //       $addFields: {
-    //         isFollowing: { $gt: [{ $size: "$meRel" }, 0] },
-    //       },
-    //     },
-    //   );
-    // } else {
-    //   pipeline.push({ $addFields: { isFollowing: false } });
-    // }
+    if (me) {
+      pipeline.push(
+        {
+          $lookup: {
+            from: "follows",
+            let: { personId: "$u._id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$follower", toOID(me)] },
+                      { $eq: ["$following", "$$personId"] },
+                    ],
+                  },
+                },
+              },
+              { $project: { _id: 1 } },
+              { $limit: 1 },
+            ],
+            as: "meRel",
+          },
+        },
+        {
+          $addFields: {
+            isFollowing: {
+              $gt: [{ $size: "$meRel" }, 0],
+            },
+          },
+        },
+      );
+    } else {
+      pipeline.push({ $addFields: { isFollowing: false } });
+    }
 
     pipeline.push({
       $project: {
         _id: "$u._id",
         name: "$u.name",
         username: "$u.username",
-        avatarUrl: "$u.avatarUrl",
-        avatarKey: "$u.avatarKey",
+        avatar: "$u.avatar",
         provider: { $ifNull: ["$u.avatarProvider", "wasabi"] },
         isFollower: { $literal: true },
+        isFollower: 1,
+        isFollowing: 1,
         // cursor fields
         createdAt: 1,
       },
@@ -191,12 +194,10 @@ export const getFollowers = async (req, res) => {
 
     return res.json({ success: true, items, nextCursor });
   } catch (e) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: e?.message || "Followers fetch failed",
-      });
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "Followers fetch failed",
+    });
   }
 };
 
@@ -205,11 +206,11 @@ export const getFollowers = async (req, res) => {
  * following = :id user যাদের follow করে
  */
 export const getFollowing = async (req, res) => {
-    // console.log("following param:", req.params);
+  // console.log("following param:", req.params);
 
   try {
     const me = req.user?._id; // optional
-     const userId = req.params.userId || req.params.id;
+    const userId = req.params.userId || req.params.id;
 
     if (!mongoose.isValidObjectId(userId)) {
       return res
@@ -262,49 +263,51 @@ export const getFollowing = async (req, res) => {
     }
 
     // if viewing someone else list -> show if ME follows that user
-    // if (me) {
-    //   pipeline.push(
-    //     {
-    //       $lookup: {
-    //         from: "follows",
-    //         let: { personId: "$u._id" },
-    //         pipeline: [
-    //           {
-    //             $match: {
-    //               $expr: {
-    //                 $and: [
-    //                   { $eq: ["$follower", toOID(me)] },
-    //                   { $eq: ["$following", "$$personId"] },
-    //                 ],
-    //               },
-    //             },
-    //           },
-    //           { $project: { _id: 1 } },
-    //           { $limit: 1 },
-    //         ],
-    //         as: "meRel",
-    //       },
-    //     },
-    //     {
-    //       $addFields: {
-    //         isFollowing: { $gt: [{ $size: "$meRel" }, 0] },
-    //       },
-    //     },
-    //   );
-    // } else {
-    //   pipeline.push({ $addFields: { isFollowing: false } });
-    // }
+    if (me) {
+      pipeline.push(
+        {
+          $lookup: {
+            from: "follows",
+            let: { personId: "$u._id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$follower", "$$personId"] },
+                      { $eq: ["$following", toOID(me)] },
+                    ],
+                  },
+                },
+              },
+              { $limit: 1 },
+            ],
+            as: "followerRel",
+          },
+        },
+        {
+          $addFields: {
+            isFollower: {
+              $gt: [{ $size: "$followerRel" }, 0],
+            },
+          },
+        },
+      );
+    } else {
+      pipeline.push({ $addFields: { isFollowing: false } });
+    }
 
     pipeline.push({
       $project: {
         _id: "$u._id",
         name: "$u.name",
         username: "$u.username",
-        avatarUrl: "$u.avatarUrl",
-        avatarKey: "$u.avatarKey",
+        avatar: "$u.avatar",
         provider: { $ifNull: ["$u.avatarProvider", "wasabi"] },
         isFollowing: { $literal: true },
         createdAt: 1,
+        isFollower: 1,
+        isFollowing: 1,
       },
     });
 
@@ -320,15 +323,12 @@ export const getFollowing = async (req, res) => {
 
     return res.json({ success: true, items, nextCursor });
   } catch (e) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: e?.message || "Following fetch failed",
-      });
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "Following fetch failed",
+    });
   }
 };
-
 
 export const followStatus = async (req, res) => {
   try {
