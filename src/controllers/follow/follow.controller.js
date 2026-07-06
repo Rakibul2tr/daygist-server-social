@@ -132,38 +132,38 @@ export const getFollowers = async (req, res) => {
 
     // ✅ compute isFollowing (me follows this follower user?)
     // me -> following = u._id
-    if (me) {
-      pipeline.push(
-        {
-          $lookup: {
-            from: "follows",
-            let: { personId: "$u._id" },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $eq: ["$follower", toOID(me)] },
-                      { $eq: ["$following", "$$personId"] },
-                    ],
-                  },
-                },
-              },
-              { $project: { _id: 1 } },
-              { $limit: 1 },
-            ],
-            as: "meRel",
-          },
-        },
-        {
-          $addFields: {
-            isFollowing: { $gt: [{ $size: "$meRel" }, 0] },
-          },
-        },
-      );
-    } else {
-      pipeline.push({ $addFields: { isFollowing: false } });
-    }
+    // if (me) {
+    //   pipeline.push(
+    //     {
+    //       $lookup: {
+    //         from: "follows",
+    //         let: { personId: "$u._id" },
+    //         pipeline: [
+    //           {
+    //             $match: {
+    //               $expr: {
+    //                 $and: [
+    //                   { $eq: ["$follower", toOID(me)] },
+    //                   { $eq: ["$following", "$$personId"] },
+    //                 ],
+    //               },
+    //             },
+    //           },
+    //           { $project: { _id: 1 } },
+    //           { $limit: 1 },
+    //         ],
+    //         as: "meRel",
+    //       },
+    //     },
+    //     {
+    //       $addFields: {
+    //         isFollowing: { $gt: [{ $size: "$meRel" }, 0] },
+    //       },
+    //     },
+    //   );
+    // } else {
+    //   pipeline.push({ $addFields: { isFollowing: false } });
+    // }
 
     pipeline.push({
       $project: {
@@ -173,7 +173,7 @@ export const getFollowers = async (req, res) => {
         avatarUrl: "$u.avatarUrl",
         avatarKey: "$u.avatarKey",
         provider: { $ifNull: ["$u.avatarProvider", "wasabi"] },
-        isFollowing: 1,
+        isFollower: { $literal: true },
         // cursor fields
         createdAt: 1,
       },
@@ -262,38 +262,38 @@ export const getFollowing = async (req, res) => {
     }
 
     // if viewing someone else list -> show if ME follows that user
-    if (me) {
-      pipeline.push(
-        {
-          $lookup: {
-            from: "follows",
-            let: { personId: "$u._id" },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $eq: ["$follower", toOID(me)] },
-                      { $eq: ["$following", "$$personId"] },
-                    ],
-                  },
-                },
-              },
-              { $project: { _id: 1 } },
-              { $limit: 1 },
-            ],
-            as: "meRel",
-          },
-        },
-        {
-          $addFields: {
-            isFollowing: { $gt: [{ $size: "$meRel" }, 0] },
-          },
-        },
-      );
-    } else {
-      pipeline.push({ $addFields: { isFollowing: false } });
-    }
+    // if (me) {
+    //   pipeline.push(
+    //     {
+    //       $lookup: {
+    //         from: "follows",
+    //         let: { personId: "$u._id" },
+    //         pipeline: [
+    //           {
+    //             $match: {
+    //               $expr: {
+    //                 $and: [
+    //                   { $eq: ["$follower", toOID(me)] },
+    //                   { $eq: ["$following", "$$personId"] },
+    //                 ],
+    //               },
+    //             },
+    //           },
+    //           { $project: { _id: 1 } },
+    //           { $limit: 1 },
+    //         ],
+    //         as: "meRel",
+    //       },
+    //     },
+    //     {
+    //       $addFields: {
+    //         isFollowing: { $gt: [{ $size: "$meRel" }, 0] },
+    //       },
+    //     },
+    //   );
+    // } else {
+    //   pipeline.push({ $addFields: { isFollowing: false } });
+    // }
 
     pipeline.push({
       $project: {
@@ -303,7 +303,7 @@ export const getFollowing = async (req, res) => {
         avatarUrl: "$u.avatarUrl",
         avatarKey: "$u.avatarKey",
         provider: { $ifNull: ["$u.avatarProvider", "wasabi"] },
-        isFollowing: 1,
+        isFollowing: { $literal: true },
         createdAt: 1,
       },
     });
