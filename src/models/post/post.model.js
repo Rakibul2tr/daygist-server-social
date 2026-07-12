@@ -72,6 +72,17 @@ const postSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    status: {
+      type: String,
+      enum: ["active", "pending", "rejected"],
+      default: "active",
+      required: true,
+      index: true,
+    },
+    updateReason: {
+      type: String,
+      default: "",
+    },
 
     privacy: {
       type: String,
@@ -143,6 +154,7 @@ const postSchema = new mongoose.Schema(
     saveCount: { type: Number, default: 0 },
     shareCount: { type: Number, default: 0 },
     viewCount: { type: Number, default: 0 },
+    videoClickCount: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

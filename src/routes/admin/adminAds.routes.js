@@ -6,7 +6,6 @@ import {
   updateAd,
   deleteAd,
   trackAd,
-  updateAdStatus,
 } from "../../controllers/admin/adminAds.controller.js";
 import { authGuard } from "../../middleware/authMiddleware.js"; 
 import { isAdmin } from "../../middleware/isAdminMiddleware.js";
@@ -25,7 +24,7 @@ router.get("/active",authGuard, getActiveAds);
 
 router.post("/track/:id",authGuard, trackAd);
 
-router.patch("/ads/:id/status", authGuard, isAdmin, updateAdStatus);
+// router.patch("/ads/:id/status", authGuard, isAdmin, updateAdStatus);
 
 
 export default router;

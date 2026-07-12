@@ -65,7 +65,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
 
   /* ---------------------- POSTS (MAIN SOURCE) ---------------------- */
   const postPipeline = [
-    { $match: { isDeleted: false } },
+    { $match: { isDeleted: false, status: "active" } },
 
     { $sort: { createdAt: -1, _id: -1 } },
 

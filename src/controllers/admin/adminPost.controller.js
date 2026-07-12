@@ -12,31 +12,53 @@ export const adminGetAllPosts = async (req, res) => {
     const limit = Math.max(parseInt(req.query.limit) || 20, 1);
 
     const q = req.query.q?.trim() || "";
-    const type = req.query.type || "all";
+    let type = req.query.type || "all";
+    let status = req.query.status;
+    let validStatuses = [
+      "pending",
+      "active",
+      "rejected",
+    ];
+
+    if (validStatuses.includes(String(type).trim().toLowerCase())) {
+      status = type; // ভুল করে আসা টাইপকে স্ট্যাটাসে কনভার্ট করা হলো
+      type = "all"; // টাইপ ফিল্টারকে রিসেট করা হলো
+    }
+    
 
     // =========================
     // FILTER
     // =========================
     const filter = {};
-
+  const andConditions = [{ isDeleted: false }];
     // search
     if (q) {
-      filter.$or = [
-        { caption: { $regex: q, $options: "i" } },
-        { text: { $regex: q, $options: "i" } },
-        { content: { $regex: q, $options: "i" } },
-      ];
+      andConditions.push({
+        $or: [
+          { caption: { $regex: q, $options: "i" } },
+          { text: { $regex: q, $options: "i" } },
+          { content: { $regex: q, $options: "i" } },
+        ],
+      });
     }
 
     // type filter
     if (type && type !== "all") {
-      filter.type = type;
+      andConditions.push({ type: type });
     }
 
+    if (status && status !== "all") {
+      andConditions.push({ status: String(status).trim().toLowerCase() });
+    }
+  
+    
+    filter.$and = andConditions;
     // =========================
     // TOTAL COUNT
     // =========================
     const total = await Post.countDocuments(filter);
+   
+    
 
     // =========================
     // POSTS
@@ -48,6 +70,7 @@ export const adminGetAllPosts = async (req, res) => {
       .populate("author", "name username avatar profilePic uid isVerified")
       .lean();
 
+      // console.log("posts filter", posts);
     // =========================
     // RESPONSE
     // =========================
@@ -107,6 +130,8 @@ export const adminUpdatePost = async (req, res) => {
       "subCategory",
       "type", // চাইলে remove করতে পারো (type change risky)
       "isDeleted", // restore করার জন্য
+      "status",
+      "updateReason",
     ];
 
     const payload = {};
@@ -125,8 +150,12 @@ export const adminUpdatePost = async (req, res) => {
     if (payload.category != null) payload.category = String(payload.category);
     if (payload.subCategory != null)
       payload.subCategory = String(payload.subCategory);
-    if (payload.layout != null)
-      payload.layout = payload.layout ? String(payload.layout) : null;
+    if (payload.status != null)
+      payload.status = payload.status ? String(payload.status) : null;
+    if (payload.updateReason != null)
+      payload.updateReason = payload.updateReason
+        ? String(payload.updateReason)
+        : null;
 
     const updated = await Post.findByIdAndUpdate(
       postId,

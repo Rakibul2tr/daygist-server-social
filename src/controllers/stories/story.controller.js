@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import { deleteFromWasabi } from "../../services/wbUpload.service.js";
 import Story from "../../models/stories/story.model.js";
 import Follow from "../../models/follow/follow.model.js";
+import StoryView from "../../models/stories/storyView.model.js";
+import StoryReaction from "../../models/stories/storyReaction.model.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -139,40 +141,87 @@ export const getUserStories = async (req, res) => {
     // privacy rules
     const isMe = String(me) === String(ownerId);
 
-    // mutual needed for friends
-    let mutualIds = [];
-    if (!isMe) {
-      const mutual = await getMutualIds(me);
-      mutualIds = mutual.mutualIds;
-    }
-
     const now = new Date();
 
     const match = {
       userId: new mongoose.Types.ObjectId(ownerId),
       isDeleted: false,
       expiresAt: { $gt: now },
+
       ...(isMe
         ? {}
         : {
-            $or: [
-              { privacy: "followers" },
-              {
-                privacy: "friends",
-                userId: {
-                  $in: mutualIds.map((id) => new mongoose.Types.ObjectId(id)),
-                },
-              },
-            ],
+            privacy: "followers",
           }),
     };
 
-    // ⚠️ friends filter: simplest way -> if not mutual => only public will pass
-    // above $or includes friends only if mutualIds contains owner; else it's false
-
     const items = await Story.find(match).sort({ createdAt: 1, _id: 1 }).lean();
 
-    return res.json({ success: true, items, ownerId, isMe });
+    const storyIds = items.map((item) => item._id);
+
+    const viewCounts = await StoryView.aggregate([
+      {
+        $match: {
+          storyId: { $in: storyIds },
+        },
+      },
+      {
+        $group: {
+          _id: "$storyId",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const reactions = await StoryReaction.find({
+      storyId: { $in: storyIds },
+    })
+      .select("storyId userId reaction")
+      .lean();
+
+      const reactionMap = new Map();
+      const myReactionMap = new Map();
+
+      for (const r of reactions) {
+        const key = String(r.storyId);
+
+        if (!reactionMap.has(key)) {
+          reactionMap.set(key, {
+            total: 0,
+            reactions: {},
+          });
+        }
+
+        const item = reactionMap.get(key);
+
+        item.total += 1;
+        item.reactions[r.reaction] = (item.reactions[r.reaction] || 0) + 1;
+
+        if (String(r.userId) === String(me)) {
+          myReactionMap.set(key, r.reaction);
+        }
+      }
+
+    const countMap = new Map(viewCounts.map((v) => [String(v._id), v.count]));
+
+    const result = items.map((item) => {
+      const id = String(item._id);
+
+      const reactionInfo = reactionMap.get(id);
+
+      return {
+        ...item,
+
+        viewCount: countMap.get(id) || 0,
+
+        reactionCount: reactionInfo?.total || 0,
+
+        reactions: reactionInfo?.reactions || {},
+
+        myReaction: myReactionMap.get(id) || null,
+      };
+    });
+
+    return res.json({ success: true, items: result, ownerId, isMe });
   } catch (e) {
     return res
       .status(500)
@@ -201,15 +250,20 @@ export const markStorySeen = async (req, res) => {
       return res.json({ success: true, message: "Owner view ignored" });
     }
 
-    await StorySeen.updateOne(
-      { viewerId: me, ownerId: story.userId },
+    await StoryView.updateOne(
       {
-        $set: {
-          lastSeenAt: story.createdAt,
-          lastStoryId: story._id,
+        storyId: story._id,
+        viewerId: me,
+      },
+      {
+        $setOnInsert: {
+          storyId: story._id,
+          viewerId: me,
         },
       },
-      { upsert: true }
+      {
+        upsert: true,
+      },
     );
 
     return res.json({ success: true });
@@ -265,7 +319,7 @@ export const getStoryFeed = async (req, res) => {
     const cursor = parseCursor(req.query.cursor);
     const cursorFilter = buildCursorFilter(cursor);
 
-    const { followingIds, mutualIds } = await getMutualIds(me);
+    const { followingIds } = await getMutualIds(me);
 
     const now = new Date();
     const meObjId = new mongoose.Types.ObjectId(me);
@@ -273,11 +327,6 @@ export const getStoryFeed = async (req, res) => {
     // ✅ allowed owners (me + following)
     const ownerIds = [String(me), ...followingIds];
     const ownerObjIds = ownerIds
-      .filter(mongoose.isValidObjectId)
-      .map((id) => new mongoose.Types.ObjectId(id));
-
-    // ✅ friends visible list (mutual only)
-    const mutualObjIds = mutualIds
       .filter(mongoose.isValidObjectId)
       .map((id) => new mongoose.Types.ObjectId(id));
 
@@ -289,9 +338,20 @@ export const getStoryFeed = async (req, res) => {
           userId: { $in: ownerObjIds },
           // privacy filter (viewer != owner)
           $or: [
-            { userId: meObjId }, // owner sees all
-            { privacy: "public" },
-            { privacy: "friends", userId: { $in: mutualObjIds } },
+            // নিজের story
+            { userId: meObjId },
+
+            // যাদের follow করি তাদের followers story
+            {
+              privacy: "followers",
+              userId: { $in: ownerObjIds },
+            },
+
+            // শুধু নিজের only_me story
+            {
+              privacy: "only_me",
+              userId: meObjId,
+            },
           ],
         },
       },
@@ -409,5 +469,147 @@ export const getStoryFeed = async (req, res) => {
     return res.json({ success: true, items: rows, nextCursor });
   } catch (e) {
     return res.status(500).json({ message: e?.message || "Story feed failed" });
+  }
+};
+
+export const getStoryViewers = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const storyId = req.params.id;
+    console.log('viewer list',storyId,me);
+    
+
+    if (!me) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(storyId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid story id",
+      });
+    }
+
+    // Story exists?
+    const story = await Story.findById(storyId).select("_id userId").lean();
+
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: "Story not found",
+      });
+    }
+
+    // Only story owner can see viewers
+    if (String(story.userId) !== String(me)) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden",
+      });
+    }
+
+    const [totalViews, viewers] = await Promise.all([
+      StoryView.countDocuments({ storyId }),
+
+      StoryView.find({ storyId })
+        .populate({
+          path: "viewerId",
+          select: "_id name username avatar verified",
+        })
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
+
+    return res.json({
+      success: true,
+      totalViews,
+      viewers,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "Failed to fetch story viewers",
+    });
+  }
+};
+
+// reaction
+
+export const reactToStory = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const storyId = req.params.id;
+    const { reaction } = req.body;
+
+
+    
+
+    if (!me) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(storyId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid story id",
+      });
+    }
+
+    const allowedReactions = [
+      "like",
+      "love",
+      "haha",
+      "wow",
+      "sad",
+      "angry",
+      "fire",
+    ];
+
+    if (!allowedReactions.includes(reaction)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reaction",
+      });
+    }
+
+    const story = await Story.findById(storyId).select("_id").lean();
+
+    if (!story) {
+      return res.status(404).json({
+        success: false,
+        message: "Story not found",
+      });
+    }
+
+    await StoryReaction.updateOne(
+      {
+        storyId,
+        userId: me,
+      },
+      {
+        $set: {
+          reaction,
+        },
+      },
+      {
+        upsert: true,
+      },
+    );
+
+    return res.json({
+      success: true,
+      message: "Reaction updated",
+    });
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "Reaction failed",
+    });
   }
 };

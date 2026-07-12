@@ -60,6 +60,7 @@ export async function getVideoFeed({
   const match = {
     isDeleted: false,
     type: "video",
+    status: "active",
     ...cursorFilter,
   };
 

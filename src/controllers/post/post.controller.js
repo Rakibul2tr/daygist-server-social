@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Post from "../../models/post/post.model.js";
 import Save from "../../models/post/save.model.js";
 import PostShare from "../../models/post/postShare.model.js";
@@ -807,6 +808,8 @@ export const createLongVideoPost = async (req, res) => {
       category: "general",
       subCategory: subCategory || "other",
       videoMode: "normal",
+      videoClickCount: 0,
+      status: "pending",
 
       medias: [
         {
@@ -829,6 +832,119 @@ export const createLongVideoPost = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: e?.message || "Upload failed",
+    });
+  }
+};
+
+export const updateLongVideoPost = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { id } = req.params; // ভিডিও পোস্টের আইডি
+
+    // ক) ইউজার অথেনটিকেশন ও আইডি ভ্যালিডেশন চেক
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Post ID" });
+    }
+
+    // খ) ডাটাবেস থেকে আগে ভিডিও পোস্টটি খুঁজে বের করা
+    const post = await Post.findById(id);
+    if (!post) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Video post not found" });
+    }
+
+    // গ) ওনারশিপ ভেরিফিকেশন (অন্য কেউ যাতে অন্যের ভিডিও এডিট করতে না পারে)
+    if (String(post.author) !== String(userId)) {
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "You are not authorized to edit this post",
+        });
+    }
+
+    // ঘ) ডাইনামিক ফিল্ড কাস্টিং (শুধুমাত্র ফ্রন্টএন্ড থেকে আসা তথ্যগুলোই আপডেট হবে)
+    const updateFields = {};
+
+    if (req.body.title !== undefined)
+      updateFields.text = String(req.body.title).trim();
+    if (req.body.description !== undefined)
+      updateFields.description = String(req.body.description).trim();
+    if (req.body.subCategory !== undefined)
+      updateFields.subCategory = String(req.body.subCategory).trim();
+    if (req.body.updateReason !== undefined)
+      updateFields.updateReason = String(req.body.updateReason).trim();
+    if (req.body.status !== undefined){
+      updateFields.status = String(req.body.status).trim();
+    }else{
+      updateFields.status = "pending";
+    }
+      
+
+     
+    // 🌟 ঙ) নতুন থাম্বনেইল আপডেট এবং পুরনো থাম্বনেইল ওয়াসাবি থেকে মুছে ফেলার লজিক
+    if (
+      req.body.thumbnail &&
+      req.body.thumbnail.url &&
+      req.body.thumbnail.key
+    ) {
+      const currentMedias = post.medias || [];
+
+      // মিডিয়া অ্যারের প্রথম আইটেমটিতে (ভিডিওর সাথে) নতুন থাম্বনেইল অবজেক্ট মার্জ করা হচ্ছে
+      if (currentMedias.length > 0 && currentMedias[0].type === "video") {
+        // 🌟 চ) ওল্ড থাম্বনেইল ডিলিট কন্ডিশন: যদি ফ্রন্টএন্ড থেকে oldThumbnailKey পাঠানো হয়
+        if (req.body.oldThumbnailKey) {
+          try {
+            const keysToDelete = [req.body.oldThumbnailKey];
+            console.log(
+              "Attempting to remove old thumbnail from Wasabi:",
+              keysToDelete,
+            );
+
+            // আপনার মেথড দিয়ে ওয়াসাবি থেকে ওল্ড কাভার ডিলিট করা
+            const out = await deleteManyFromWasabi(keysToDelete);
+            console.log("Wasabi thumbnail delete response:", out);
+          } catch (wasabiError) {
+            // কোনো কারণে ওয়াসাবি ডিলিট ফেল করলেও যেন ডাটাবেস প্রসেস না আটকায় তার জন্য ক্যাচ ব্লক
+            console.error(
+              "Failed to delete old thumbnail from Wasabi storage:",
+              wasabiError.message,
+            );
+          }
+        }
+
+        // নতুন থাম্বনেইলের ইউআরএল ও কি অ্যাসাইন করা
+        currentMedias[0].thumbnailUrl = req.body.thumbnail.url;
+        currentMedias[0].thumbnailKey = req.body.thumbnail.key;
+        updateFields.medias = currentMedias;
+      }
+    }
+
+    // ছ) ডাটাবেসে আপডেট সম্পাদন করা
+    const updatedPost = await Post.findByIdAndUpdate(
+      id,
+      { $set: updateFields },
+      { new: true, runValidators: true },
+    );
+
+    return res.json({
+      success: true,
+      message:
+        "Video post info updated and old thumbnail cleared from storage.",
+      post: updatedPost,
+    });
+  } catch (error) {
+    console.error("updateLongVideoPost error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Update failed",
     });
   }
 };

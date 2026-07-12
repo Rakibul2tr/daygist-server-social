@@ -1375,6 +1375,7 @@ export const getMyVideos = async (req, res) => {
       { $sort: { createdAt: -1, _id: -1 } },
       { $limit: take },
 
+      // ১. ইউজার ডাটা lookup (এটি থাকবে কারণ লেখকের প্রোফাইল ডেটা রেন্ডার করতে হবে)
       {
         $lookup: {
           from: "users",
@@ -1385,36 +1386,19 @@ export const getMyVideos = async (req, res) => {
       },
       { $unwind: "$author" },
 
-      {
-        $lookup: {
-          from: "adclicks",
-          let: { postId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: ["$post", "$$postId"],
-                },
-              },
-            },
-            {
-              $count: "count",
-            },
-          ],
-          as: "clickStats",
-        },
-      },
+      // 🌟 ২. ঠিক করা হয়েছে: videoclicks এর জন্য করা জটিল $lookup এবং $addFields পুরোপুরি রিমুভ করা হয়েছে
+
+      // ৩. ডাটা ফিল্ড মার্জ ও অ্যাড করা
       {
         $addFields: {
           canEdit: true,
           canDelete: true,
           "author.isMe": true,
-          adClickCount: {
-            $ifNull: [{ $arrayElemAt: ["$clickStats.count", 0] }, 0],
-          },
+          // videoClickCount এখন সরাসরি ডকুমেন্টে থাকায় এখানে নতুন করে এড করার কিছু নেই
         },
       },
 
+      // ৪. ফাইনাল প্রজেকশন (আউটপুট ফিল্ড ফিল্টারিং)
       {
         $project: {
           "author._id": 1,
@@ -1434,13 +1418,15 @@ export const getMyVideos = async (req, res) => {
           videoMode: 1,
           category: 1,
           subCategory: 1,
+          status: 1,
 
           likeCount: 1,
           commentCount: 1,
           saveCount: 1,
           shareCount: 1,
           viewCount: 1,
-          adClickCount: 1,
+          videoClickCount: 1,
+          updateReason: 1,
 
           createdAt: 1,
           updatedAt: 1,
