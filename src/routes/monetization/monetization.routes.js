@@ -9,6 +9,7 @@ import {
   getMyMonetization,
 } from "../../controllers/monetization/monetization.controller.js";
 import multer from "multer";
+import { getMyVideoEarnings } from "../../controllers/monetization/earning.controller.js";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -24,6 +25,7 @@ router.post(
   applyMonetization
 );
 router.get("/me", authGuard, getMyMonetization);
+router.get("/my-video-earnings", authGuard, getMyVideoEarnings);
 
 // monetization act // admin
 // get all  monetization // admin

@@ -476,9 +476,6 @@ export const getStoryViewers = async (req, res) => {
   try {
     const me = req.user?._id;
     const storyId = req.params.id;
-    console.log('viewer list',storyId,me);
-    
-
     if (!me) {
       return res.status(401).json({
         success: false,

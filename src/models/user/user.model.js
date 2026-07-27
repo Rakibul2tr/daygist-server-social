@@ -52,6 +52,7 @@ const userSchema = new mongoose.Schema(
     },
 
     username: { type: String, default: null },
+    gender: { type: String, default: null },
 
     birthDate: { type: Date, default: null },
     country: { type: String, default: null },

@@ -25,3 +25,34 @@ export const addView = async (req, res) => {
     return res.status(500).json({ message: e?.message || "View failed" });
   }
 };
+
+export const addReelsViewCount = async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    const post = await Post.findByIdAndUpdate(
+      postId,
+      {
+        $inc: { viewCount: 1 },
+      },
+      { new: true },
+    );
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      viewCount: post.viewCount,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};

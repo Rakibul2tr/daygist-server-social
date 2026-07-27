@@ -145,6 +145,9 @@ export const completeProfile = async (req, res) => {
     if ("age" in body) {
       update.age = Number(body.age) || null;
     }
+    if ("gender" in body) {
+      update.gender = Number(body.gender) || null;
+    }
 
     // =========================
     // ✅ IP থেকে real country বের করা
@@ -208,6 +211,7 @@ export const completeProfile = async (req, res) => {
         realCountry: user.realCountry, // ip detected
         age: user.age,
         isNewUser: user.isNewUser,
+        gender: user.gender,
       },
     });
   } catch (e) {

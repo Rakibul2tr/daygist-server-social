@@ -255,7 +255,8 @@ export const handleAdAction = async (req, res) => {
       });
     }
 
-    // কেস ১: ভিডিও শেষ হয়েছে (action === "end") -> টাকা বা কয়েন কাটবে না, শুধু ইম্প্রেশন বাড়বে
+  // কেস ১: ভিডিও শেষ হয়েছে (action === "end") -> টাকা বা কয়েন কাটবে না, শুধু ইম্প্রেশন বাড়বে
+  
     if (action === "end") {
       ad.impressions += 1;
       await ad.save();
@@ -283,6 +284,7 @@ export const handleAdAction = async (req, res) => {
       if (action === "click") {
         ad.clicks += 1;
         ad.impressions += 1;
+        await Post.findByIdAndUpdate(postId, { $inc: { videoClickCount: 1 } });
       } else {
         ad.impressions += 1;
       }

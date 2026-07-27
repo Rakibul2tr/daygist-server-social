@@ -41,8 +41,8 @@ export const manageBalance = async (req, res) => {
       }
       currentWallet.available -= amountNum;
       currentUser.balance += amountNum;
-       await currentWallet.save();
-       await currentUser.save();
+      await currentWallet.save();
+      await currentUser.save();
 
       const transaction = await Transaction.create({
         userId,
@@ -81,7 +81,6 @@ export const manageBalance = async (req, res) => {
       }
 
       if (targetUser.balance === undefined) targetUser.balance = 0;
-    
 
       // ব্যালেন্স আদান-প্রদান
       currentWallet.available -= amountNum;
@@ -116,14 +115,12 @@ export const manageBalance = async (req, res) => {
           message: `Minimum withdraw is ৳${minWithdraw}`,
         });
       }
-       if (currentWallet.available < amountNum) {
-         return res
-           .status(400)
-           .json({
-             success: false,
-             message: "Insufficient wallet available balance",
-           });
-       }
+      if (currentWallet.available < amountNum) {
+        return res.status(400).json({
+          success: false,
+          message: "Insufficient wallet available balance",
+        });
+      }
       if (!method || !accountNumber) {
         return res.status(400).json({
           success: false,
@@ -164,21 +161,86 @@ export const manageBalance = async (req, res) => {
 // @desc    Get user transaction history
 // @route   GET /api/balance/history
 // @access  Private
+// export const getTransactionHistory = async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+
+//     const history = await Transaction.find({ userId })
+//       .sort({ createdAt: -1 })
+//       .populate("targetUserId", "name email");
+//     return res.status(200).json({
+//       success: true,
+//       count: history.length,
+//       data: history,
+//     });
+//   } catch (error) {
+//     console.error("Error fetching transaction history:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Server Error. Could not fetch history.",
+//     });
+//   }
+// };
+
 export const getTransactionHistory = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
 
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    // ডাটাবেস থেকে ট্রানজেকশন হিস্ট্রি এবং targetUserId ও ওনার (userId) দুটিই পপুলেট করা হলো
     const history = await Transaction.find({ userId })
       .sort({ createdAt: -1 })
-      .populate("targetUserId", "name email");
+      .populate("userId", "name email avatar profilePic") // 🌟 নিজের ডাটা পপুলেট করার জন্য
+      .populate("targetUserId", "name email avatar profilePic") // অন্য ইউজারের ডাটা পপুলেট করার জন্য
+      .lean();
+
+    // 🌟 ডাটা ম্যাপিং: own এবং other দুই মোডেই targetUser অবজেক্ট সেট করা
+    const formattedHistory = history.map((item) => {
+      // কেস ১: অন্য কাউকে টাকা পাঠালে (type === "other")
+      if (item.type === "other" && item.targetUserId) {
+        return {
+          ...item,
+          targetUser: {
+            _id: item.targetUserId._id,
+            name: item.targetUserId.name || "DayGist User",
+            email: item.targetUserId.email || "",
+            avatar:
+              item.targetUserId.avatar || item.targetUserId.profilePic || null,
+          },
+        };
+      }
+
+      // 🌟 কেস ২: নিজের ক্যাম্পেইন বা রিফান্ড হলে (type === "own") -> নিজের তথ্যই যাবে
+      if (item.type === "own" && item.userId) {
+        return {
+          ...item,
+          targetUser: {
+            _id: item.userId._id,
+            name: item.userId.name || "My Account",
+            email: item.userId.email || "",
+            avatar: item.userId.avatar || item.userId.profilePic || null,
+          },
+        };
+      }
+
+      // উইথড্র বা অন্যান্য ক্ষেত্রে যদি কিছু না থাকে
+      return {
+        ...item,
+        targetUser: null,
+      };
+    });
+
     return res.status(200).json({
       success: true,
-      count: history.length,
-      data: history,
+      count: formattedHistory.length,
+      data: formattedHistory,
     });
   } catch (error) {
     console.error("Error fetching transaction history:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server Error. Could not fetch history.",
     });
