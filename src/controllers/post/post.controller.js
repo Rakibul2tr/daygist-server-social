@@ -12,6 +12,7 @@ import {
 import PostLike from "../../models/post/postLike.model.js";
 import Follow from "../../models/follow/follow.model.js";
 import GroupPost from "../../models/group/groupPost.model.js";
+import Ad from "../../models/ads/ad.model.js"; 
 
 const isOwner = (post, userId) => String(post.author) === String(userId);
 const toStr = (v) => (typeof v === "string" ? v.trim() : "");
@@ -466,52 +467,64 @@ export const deletePost = async (req, res) => {
   }
 };
 
-// export const getPostById = async (req, res) => {
-//   try {
-//     const postId = req.params.id;
-
-//     const post = await Post.findOne({ _id: postId, isDeleted: false }).populate(
-//       "author",
-//       "name username avatar"
-//     );
-
-//     if (!post) return res.status(404).json({ message: "Post not found" });
-
-//     // share link (frontend handle করবে)
-//     const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/post/${
-//       post._id
-//     }`;
-
-//     return res.json({ success: true, post, shareLink });
-//   } catch (e) {
-//     return res.status(500).json({ message: e?.message || "Get post failed" });
-//   }
-// };
-
 export const getPostById = async (req, res) => {
   try {
     const postId = req.params.id;
     const me = req.user?._id || null;
+    const type = String(req.query.type || "post").toLowerCase(); // post অথবা ad 🌟
 
-    const post = await Post.findOne({ _id: postId, isDeleted: false })
-      .populate("author", "name username avatar")
-      .lean();
-
-    if (!post) {
-      return res.status(404).json({ message: "Post not found" });
+    if (!mongoose.isValidObjectId(postId)) {
+      return res.status(400).json({ message: "Invalid ID format" });
     }
+
+    let postData = null;
+
+    // ==========================================
+    // 🌟 🌟 ২. টাইপ অনুযায়ী ডাইনামিক মডেল কুয়েরি 🌟 🌟
+    // ==========================================
+    if (type === "ad") {
+      // বিজ্ঞাপনদাতার তথ্যসহ অ্যাড কালেকশন থেকে ডেটা খোঁজা
+      postData = await Ad.findOne({ _id: postId })
+        .populate("advertiserId", "name username avatar ")
+        .lean();
+
+      if (postData) {
+        // ফ্রন্টএন্ডে যাতে ওল্ড পোস্ট কার্ডের 'author' লজিকটি না ভাঙে, সেজন্য সিঙ্ক দেওয়া হলো
+        postData.author = postData.advertiserId;
+        postData.feedType = "ad"; // ফ্রন্টএন্ড ইউআই চেনার জন্য ফ্ল্যাগ
+      }
+    } else {
+      // সাধারণ পোস্ট খোঁজার লজিক (আপনার আগের কোড)
+      postData = await Post.findOne({ _id: postId, isDeleted: false })
+        .populate("author", "name username avatar")
+        .lean();
+    }
+
+    // যদি পোস্ট বা বিজ্ঞাপন কোনোটিই ডাটাবেসে না পাওয়া যায়
+    if (!postData) {
+      const errorMsg =
+        type === "ad" ? "Ad campaign not found" : "Post not found";
+      return res.status(404).json({ message: errorMsg });
+    }
+
     let isLiked = false;
     let isShared = false;
-    let reaction = null; 
+    let reaction = null;
     let isFollowingAuthor = false;
 
+    // 🌟 ৩. প্যারালাল কুয়েরি ইন্টিগ্রেশন (বিজ্ঞপ্তি এবং সাধারণ পোস্ট উভয়ের জন্যই কাজ করবে)
     if (me) {
+      const authorId =
+        type === "ad" ? postData.advertiserId?._id : postData.author?._id;
+
       const [likedRow, sharedRow, followingRow] = await Promise.all([
+        // আমাদের পলিমরফিক PostLike কালেকশন থেকে লাইভ রিয়্যাক্ট খোঁজা
         PostLike.findOne({ user: me, post: postId }).select("type").lean(),
+        // পলিমরফিক PostShare থেকে শেয়ার ট্র্যাকিং চেক
         PostShare.exists({ user: me, post: postId }),
-        Follow.exists({ follower: me, following: post.author?._id }),
+        // বিজ্ঞাপনদাতা বা ভিডিওর লেখককে ইউজার ফলো করে রেখেছে কিনা
+        authorId ? Follow.exists({ follower: me, following: authorId }) : false,
       ]);
-      // console.log('liked row',likedRow);
 
       isLiked = !!likedRow;
       reaction = likedRow ? likedRow.type || "like" : null;
@@ -519,12 +532,14 @@ export const getPostById = async (req, res) => {
       isFollowingAuthor = !!followingRow;
     }
 
-    const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/post/${post._id}`;
+    // ৪. ডাইনামিক শেয়ার লিংক জেনারেশন
+    const pathPrefix = type === "ad" ? "ad" : "post";
+    const shareLink = `${process.env.PUBLIC_APP_BASE_URL || "https://daygist.com"}/${pathPrefix}/${postData._id}`;
 
     return res.json({
       success: true,
       post: {
-        ...post,
+        ...postData,
         isLiked,
         reaction,
         isShared,
@@ -533,11 +548,63 @@ export const getPostById = async (req, res) => {
       shareLink,
     });
   } catch (e) {
+    console.error("Get Post By ID Error:", e);
     return res.status(500).json({
       message: e?.message || "Get post failed",
     });
   }
 };
+
+// export const getPostById = async (req, res) => {
+//   try {
+//     const postId = req.params.id;
+//     const me = req.user?._id || null;
+
+//     const post = await Post.findOne({ _id: postId, isDeleted: false })
+//       .populate("author", "name username avatar")
+//       .lean();
+
+//     if (!post) {
+//       return res.status(404).json({ message: "Post not found" });
+//     }
+//     let isLiked = false;
+//     let isShared = false;
+//     let reaction = null; 
+//     let isFollowingAuthor = false;
+
+//     if (me) {
+//       const [likedRow, sharedRow, followingRow] = await Promise.all([
+//         PostLike.findOne({ user: me, post: postId }).select("type").lean(),
+//         PostShare.exists({ user: me, post: postId }),
+//         Follow.exists({ follower: me, following: post.author?._id }),
+//       ]);
+//       // console.log('liked row',likedRow);
+
+//       isLiked = !!likedRow;
+//       reaction = likedRow ? likedRow.type || "like" : null;
+//       isShared = !!sharedRow;
+//       isFollowingAuthor = !!followingRow;
+//     }
+
+//     const shareLink = `${process.env.PUBLIC_APP_BASE_URL || ""}/post/${post._id}`;
+
+//     return res.json({
+//       success: true,
+//       post: {
+//         ...post,
+//         isLiked,
+//         reaction,
+//         isShared,
+//         isFollowingAuthor,
+//       },
+//       shareLink,
+//     });
+//   } catch (e) {
+//     return res.status(500).json({
+//       message: e?.message || "Get post failed",
+//     });
+//   }
+// };
 
 export const getFeed = async (req, res) => {
   try {
@@ -568,13 +635,37 @@ export const savePost = async (req, res) => {
   try {
     const userId = req.user?._id;
     const postId = req.params.id;
+    const type = req.query.type
 
-    const targetType =
-      req.body?.targetType === "groupPost" ? "groupPost" : "post";
+  //  console.log('req.query.type',userId,postId,type);
+   const targetType =
+     req.body?.targetType === "groupPost"
+       ? "groupPost"
+       : req.query.type === "ad"
+         ? "ad"
+         : "post";
 
-    const Model = targetType === "post" ? Post : GroupPost;
+   let Model;
 
-    const post = await Model.findOne({ _id: postId, isDeleted: false });
+   switch (targetType) {
+     case "groupPost":
+       Model = GroupPost;
+       break;
+
+     case "ad":
+       Model = Ad;
+       break;
+
+     default:
+       Model = Post;
+   }
+
+    const filter =
+      targetType === "ad" ? { _id: postId } : { _id: postId, isDeleted: false };
+
+     
+    const post = await Model.findOne(filter);
+
     if (!post) return res.status(404).json({ message: "Not found" });
 
     const r = await Save.updateOne(
@@ -617,9 +708,26 @@ export const unsavePost = async (req, res) => {
     const postId = req.params.id;
 
     const targetType =
-      req.body?.targetType === "groupPost" ? "groupPost" : "post";
+      req.body?.targetType === "groupPost"
+        ? "groupPost"
+        : req.query.type === "ad"
+          ? "ad"
+          : "post";
 
-    const Model = targetType === "post" ? Post : GroupPost;
+    let Model;
+
+    switch (targetType) {
+      case "groupPost":
+        Model = GroupPost;
+        break;
+
+      case "ad":
+        Model = Ad;
+        break;
+
+      default:
+        Model = Post;
+    }
 
     const deleted = await Save.deleteOne({
       user: userId,
@@ -633,11 +741,13 @@ export const unsavePost = async (req, res) => {
 
     return res.json({
       success: true,
-      isSaved: false, // ✅ important
+      isSaved: false,
       message: "Unsaved",
     });
   } catch (e) {
-    return res.status(500).json({ message: e?.message || "Unsave failed" });
+    return res.status(500).json({
+      message: e?.message || "Unsave failed",
+    });
   }
 };
 
@@ -664,14 +774,27 @@ export const getSavedPosts = async (req, res) => {
       .filter((s) => s.targetType === "groupPost")
       .map((s) => s.targetId);
 
-    const [postsData, groupPosts] = await Promise.all([
+      const adIds = saves
+        .filter((s) => s.targetType === "ad")
+        .map((s) => s.targetId);
+
+    const [postsData, groupPosts, ads] = await Promise.all([
       Post.find({ _id: { $in: postIds }, isDeleted: false })
         .populate("author", "name username avatar")
         .lean(),
 
-      GroupPost.find({ _id: { $in: groupPostIds }, isDeleted: { $ne: true } })
+      GroupPost.find({
+        _id: { $in: groupPostIds },
+        isDeleted: { $ne: true },
+      })
         .populate("authorId", "name avatar")
         .populate("groupId", "name privacy coverUrl")
+        .lean(),
+
+      Ad.find({
+        _id: { $in: adIds },
+      })
+        .populate("advertiserId", "name username avatar email")
         .lean(),
     ]);
 
@@ -693,10 +816,38 @@ export const getSavedPosts = async (req, res) => {
       ]),
     );
 
+    const adMap = new Map(
+      ads.map((ad) => [
+        String(ad._id),
+        {
+          ...ad,
+
+          // frontend compatibility
+          author: ad.advertiserId,
+
+          feedType: "ads",
+          isSave: true,
+        },
+      ]),
+    );
+
     const items = saves
       .map((s) => {
         const id = String(s.targetId);
-        return s.targetType === "post" ? postMap.get(id) : groupMap.get(id);
+
+        switch (s.targetType) {
+          case "post":
+            return postMap.get(id);
+
+          case "groupPost":
+            return groupMap.get(id);
+
+          case "ad":
+            return adMap.get(id);
+
+          default:
+            return null;
+        }
       })
       .filter(Boolean);
     // console.log('items',items);

@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Follow from "../../models/follow/follow.model.js";
 import User from "../../models/user/user.model.js";
 import { buildCursorFilter, parseCursor } from "../../utils/cursor.js";
+import Block from "../../models/follow/block.model.js";
 
 const toId = (v) => String(v || "");
 const toOID = (id) => new mongoose.Types.ObjectId(id);
@@ -58,6 +59,22 @@ export const unfollowUser = async (req, res) => {
       await User.updateOne({ _id: me }, { $inc: { followingCount: -1 } });
       await User.updateOne({ _id: targetId }, { $inc: { followerCount: -1 } });
     }
+    const result = await Block.updateOne(
+      {
+        blockerId: me,
+        blockedUserId: targetId,
+      },
+      {
+        $setOnInsert: {
+          blockerId: me,
+          blockedUserId: targetId,
+        },
+      },
+      {
+        upsert: true,
+      },
+    );
+    
 
     return res.json({ success: true, followed: false });
   } catch (e) {
@@ -73,8 +90,8 @@ export const getFollowers = async (req, res) => {
   try {
     const me = req.user?._id; // optional (guest হলে null থাকতে পারে)
     const userId = req.params.userId || req.params.id;
-    console.log("me =", me);
-    console.log("userId =", userId);
+    // console.log("me =", me);
+    // console.log("userId =", userId);
 
     if (!mongoose.isValidObjectId(userId)) {
       return res
@@ -160,6 +177,11 @@ export const getFollowers = async (req, res) => {
             isFollowing: {
               $gt: [{ $size: "$meRel" }, 0],
             },
+          },
+        },
+        {
+          $match: {
+            isFollowing: false,
           },
         },
       );
@@ -292,6 +314,11 @@ export const getFollowing = async (req, res) => {
             },
           },
         },
+        {
+          $match: {
+            isFollower: false,
+          },
+        },
       );
     } else {
       pipeline.push({ $addFields: { isFollowing: false } });
@@ -326,6 +353,271 @@ export const getFollowing = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: e?.message || "Following fetch failed",
+    });
+  }
+};
+
+export const getCircle = async (req, res) => {
+  try {
+    const me = req.user?._id;
+
+    if (!me) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const q = String(req.query.q || "").trim();
+    const cursor = parseCursor(req.query.cursor);
+    const cursorFilter = buildCursorFilter(cursor);
+
+    const pipeline = [
+      {
+        // আমি যাদের follow করি
+        $match: {
+          follower: toOID(me),
+          ...cursorFilter,
+        },
+      },
+
+      {
+        $sort: {
+          createdAt: -1,
+          _id: -1,
+        },
+      },
+
+      {
+        $limit: limit,
+      },
+
+      // user info
+      {
+        $lookup: {
+          from: "users",
+          localField: "following",
+          foreignField: "_id",
+          as: "u",
+        },
+      },
+      {
+        $unwind: "$u",
+      },
+
+      // check user follows me
+      {
+        $lookup: {
+          from: "follows",
+          let: {
+            personId: "$u._id",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ["$follower", "$$personId"],
+                    },
+                    {
+                      $eq: ["$following", toOID(me)],
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              $limit: 1,
+            },
+          ],
+          as: "mutual",
+        },
+      },
+
+      // only mutual
+      {
+        $match: {
+          $expr: {
+            $gt: [{ $size: "$mutual" }, 0],
+          },
+        },
+      },
+    ];
+
+    // search
+    if (q) {
+      pipeline.push({
+        $match: {
+          $or: [
+            {
+              "u.name": {
+                $regex: q,
+                $options: "i",
+              },
+            },
+            {
+              "u.username": {
+                $regex: q,
+                $options: "i",
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $project: {
+        _id: "$u._id",
+        name: "$u.name",
+        username: "$u.username",
+        avatar: "$u.avatar",
+        provider: {
+          $ifNull: ["$u.avatarProvider", "wasabi"],
+        },
+        isFollower: {
+          $literal: true,
+        },
+        isFollowing: {
+          $literal: true,
+        },
+        createdAt: 1,
+      },
+    });
+
+    const items = await Follow.aggregate(pipeline);
+
+    const nextCursor =
+      items.length > 0
+        ? {
+            createdAt: items[items.length - 1].createdAt,
+            _id: items[items.length - 1]._id,
+          }
+        : null;
+
+    return res.json({
+      success: true,
+      items,
+      nextCursor,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "Circle fetch failed",
+    });
+  }
+};
+
+export const getBlockedUsers = async (req, res) => {
+  try {
+    const me = req.user._id;
+    
+    
+
+    const items = await Block.aggregate([
+      {
+        $match: {
+          blockerId: toOID(me),
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "blockedUserId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: "$user",
+      },
+      {
+        $project: {
+          _id: "$user._id",
+          name: "$user.name",
+          username: "$user.username",
+          avatar: "$user.avatar",
+          provider: { $ifNull: ["$user.avatarProvider", "wasabi"] },
+          blockedAt: "$createdAt",
+        },
+      },
+    ]);
+   
+    
+
+    return res.json({
+      success: true,
+      items,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      message: e.message,
+    });
+  }
+};
+
+export const blockUser = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const targetId = req.params.userId;
+
+    if (!me) return res.status(401).json({ message: "Unauthorized" });
+
+    if (!mongoose.isValidObjectId(targetId))
+      return res.status(400).json({ message: "Invalid userId" });
+
+    if (String(me) === String(targetId))
+      return res.status(400).json({ message: "Invalid operation" });
+
+    await Block.updateOne(
+      {
+        blockerId: me,
+        blockedUserId: targetId,
+      },
+      {
+        $setOnInsert: {
+          blockerId: me,
+          blockedUserId: targetId,
+        },
+      },
+      {
+        upsert: true,
+      },
+    );
+
+    return res.json({
+      success: true,
+      blocked: true,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      message: e.message || "Block failed",
+    });
+  }
+};
+
+export const unblockUser = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const targetId = req.params.userId;
+
+    if (!me) return res.status(401).json({ message: "Unauthorized" });
+
+    await Block.deleteOne({
+      blockerId: me,
+      blockedUserId: targetId,
+    });
+
+    return res.json({
+      success: true,
+      blocked: false,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      message: e.message || "Unblock failed",
     });
   }
 };

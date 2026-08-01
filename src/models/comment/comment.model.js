@@ -5,7 +5,7 @@ const commentSchema = new mongoose.Schema(
   {
     targetType: {
       type: String,
-      enum: ["post", "groupPost"],
+      enum: ["post", "groupPost", "ad"],
       required: true,
       index: true,
     },
@@ -38,7 +38,7 @@ const commentSchema = new mongoose.Schema(
     // counters (future: comment likes / reply count)
     likeCount: { type: Number, default: 0 },
     replyCount: { type: Number, default: 0 },
-    
+
     reactionCount: {
       type: Number,
       default: 0,

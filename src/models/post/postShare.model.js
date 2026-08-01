@@ -2,19 +2,28 @@ import mongoose from "mongoose";
 
 const postShareSchema = new mongoose.Schema(
   {
-    post: { type: mongoose.Schema.Types.ObjectId, ref: "Post", required: true },
+    // 🌟 ১. ডাইনামিক রেফারেন্সের জন্য targetType ফিল্ড যুক্ত করা হলো
+    targetType: {
+      type: String,
+      enum: ["Post", "Ad","groupPost"], // কোন টেবিলে শেয়ার হচ্ছে (সাধারণ পোস্ট নাকি বিজ্ঞাপন)
+      required: true,
+      default: "Post",
+    },
+    // 🌟 ২. refPath দিয়ে ডাইনামিকালি targetType এর সাথে লক করা হলো
+    post: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      refPath: "targetType", // ➔ targetType এর ভ্যালু যা হবে, ref অটোমেটিক সেই টেবিল লক করবে
+    },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    // optional: share caption
-    // caption: String,
-    // optional: share type (copy link / external / in-app)
-    // type: { type: String, default: "external" },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-// postShareSchema.index({ post: 1, user: 1 }, { unique: true }); // এক user ১ পোস্ট একবার share (চাইলে remove করো)
+// ইন্ডেক্সিং (আপনার ওল্ড প্যাটার্ন হুবহু ঠিক রাখা হয়েছে)
 postShareSchema.index({ post: 1, createdAt: -1 });
+postShareSchema.index({ user: 1, createdAt: -1 });
 
-const PostShare= mongoose.models.PostShare ||
-  mongoose.model("PostShare", postShareSchema);
+const PostShare =
+  mongoose.models.PostShare || mongoose.model("PostShare", postShareSchema);
 export default PostShare;

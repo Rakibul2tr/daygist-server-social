@@ -1,5 +1,3 @@
-
-
 // controllers/comment/comment.controller.js
 import mongoose from "mongoose";
 import Post from "../../models/post/post.model.js";
@@ -8,6 +6,7 @@ import Comment from "../../models/comment/comment.model.js";
 import Notification from "../../models/notification/notification.model.js";
 import { sendPushToUser } from "../../services/push/sendPushToUser.js"; // adjust path
 import CommentReaction from "../../models/comment/commentReeaction.model.js";
+import Ad from "../../models/ads/ad.model.js"; 
 
 /* ------------------------- cursor helpers ------------------------- */
 const parseCursor = (raw) => {
@@ -35,15 +34,17 @@ const buildCursorFilter = (cursor) => {
   };
 };
 
-const isValidType = (t) => t === "post" || t === "groupPost";
+const isValidType = (t) => t === "post" || t === "groupPost"|| "ad";
 
 /* ===================================================================
    ✅ CREATE COMMENT (post + groupPost)
    Route: POST /comments/:postId
    Body: { type:"post"|"groupPost", text, parentId? }
 =================================================================== */
+
 // export const createComment = async (req, res) => {
 //   const session = await mongoose.startSession();
+
 //   try {
 //     const userId = req.user?._id;
 //     if (!userId) {
@@ -53,56 +54,57 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 //     const postId = String(req.params?.postId || "");
 //     const text = String(req.body?.text || "").trim();
 //     const parentId = req.body?.parentId || null;
-//     const type = String(req.body?.type || "post"); // ✅ "post" | "groupPost"
-//     // console.log(postId,text,parentId,type);
+//     const type = String(req.body?.type || "post"); // "post" | "groupPost"
 
 //     if (!mongoose.isValidObjectId(postId)) {
 //       return res.status(400).json({ ok: false, message: "Invalid post id" });
 //     }
+
 //     if (parentId && !mongoose.isValidObjectId(parentId)) {
 //       return res.status(400).json({ ok: false, message: "Invalid parent id" });
 //     }
+
 //     if (!isValidType(type)) {
 //       return res.status(400).json({ ok: false, message: "Invalid type" });
 //     }
+
 //     if (!text) {
 //       return res.status(400).json({ ok: false, message: "Comment required" });
 //     }
 
-//     // ✅ notify targets
 //     let postOwnerId = null;
 //     let parentCommentOwnerId = null;
 //     const isReply = !!parentId;
-
 //     let createdId = null;
 
 //     await session.withTransaction(async () => {
-//       // ✅ find target + increment commentCount
-//       if (type === "post") {
+
+//       // ✅ target post/group post check
+//      if (type === "post") {
 //         const post = await Post.findOne({
 //           _id: postId,
 //           isDeleted: false,
 //         }).session(session);
+
 //         if (!post) throw new Error("Post not found");
 //         postOwnerId = post.author;
 
+//         // ✅ only top-level comment increments post commentCount
 //         await Post.updateOne(
 //           { _id: postId },
 //           { $inc: { commentCount: 1 } },
 //           { session },
 //         );
 //       } else {
-//         // console.log('post id',postId);
-
 //         const gp = await GroupPost.findOne({
 //           _id: postId,
 //           isDeleted: { $ne: true },
 //         }).session(session);
-//         // console.log('group post',gp);
 
 //         if (!gp) throw new Error("Post not found");
 //         postOwnerId = gp.authorId;
 
+//         // ✅ only top-level comment increments group post commentCount
 //         await GroupPost.updateOne(
 //           { _id: postId },
 //           { $inc: { "counts.commentCount": 1 } },
@@ -110,8 +112,8 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 //         );
 //       }
 
-//       // ✅ parent validation (must be same target)
-//       if (parentId) {
+//       // ✅ parent validation for reply
+//       if (isReply) {
 //         const parent = await Comment.findOne({
 //           _id: parentId,
 //           targetType: type,
@@ -120,6 +122,7 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 //         }).session(session);
 
 //         if (!parent) throw new Error("Parent comment not found");
+
 //         parentCommentOwnerId = parent.author;
 
 //         await Comment.updateOne(
@@ -143,13 +146,12 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 //       );
 
 //       createdId = created?.[0]?._id;
-//     });
+//     };);
 
 //     const comment = await Comment.findById(createdId)
 //       .populate("author", "name username profilePic uid")
 //       .lean();
 
-//     // ✅ notify + push after commit
 //     const meName = req.user?.name || req.user?.username || "Someone";
 
 //     const payload =
@@ -159,6 +161,7 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 
 //     if (isReply) {
 //       const to = parentCommentOwnerId ? String(parentCommentOwnerId) : null;
+
 //       if (to && to !== String(userId)) {
 //         const n = await Notification.create({
 //           toUserId: to,
@@ -177,6 +180,7 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 //       }
 //     } else {
 //       const to = postOwnerId ? String(postOwnerId) : null;
+
 //       if (to && to !== String(userId)) {
 //         const n = await Notification.create({
 //           toUserId: to,
@@ -198,12 +202,14 @@ const isValidType = (t) => t === "post" || t === "groupPost";
 //     return res.json({ ok: true, comment });
 //   } catch (e) {
 //     const msg = e?.message || "Comment failed";
+
 //     const status =
 //       msg === "Post not found"
 //         ? 404
 //         : msg === "Parent comment not found"
 //           ? 404
 //           : 500;
+
 //     return res.status(status).json({ ok: false, message: msg });
 //   } finally {
 //     session.endSession();
@@ -222,7 +228,7 @@ export const createComment = async (req, res) => {
     const postId = String(req.params?.postId || "");
     const text = String(req.body?.text || "").trim();
     const parentId = req.body?.parentId || null;
-    const type = String(req.body?.type || "post"); // "post" | "groupPost"
+    const type = String(req.body?.type || "post"); // "post" | "groupPost" | "ad" 🌟
 
     if (!mongoose.isValidObjectId(postId)) {
       return res.status(400).json({ ok: false, message: "Invalid post id" });
@@ -232,10 +238,7 @@ export const createComment = async (req, res) => {
       return res.status(400).json({ ok: false, message: "Invalid parent id" });
     }
 
-    if (!isValidType(type)) {
-      return res.status(400).json({ ok: false, message: "Invalid type" });
-    }
-
+  
     if (!text) {
       return res.status(400).json({ ok: false, message: "Comment required" });
     }
@@ -246,8 +249,27 @@ export const createComment = async (req, res) => {
     let createdId = null;
 
     await session.withTransaction(async () => {
-      // ✅ target post/group post check
-      if (type === "post") {
+      // ==========================================
+      // 🌟 🌟 ২. AD CAMPAIGN CHECK & COUNTER UPDATE
+      // ==========================================
+      if (type === "ad") {
+        const adCampaign = await Ad.findOne({
+          _id: postId,
+          status: "active", // শুধুমাত্র লাইভ বিজ্ঞাপনেই কমেন্ট করা যাবে
+        }).session(session);
+
+        if (!adCampaign) throw new Error("Ad campaign not found");
+        postOwnerId = adCampaign.advertiserId; // বিজ্ঞাপনদাতার আইডি লক করা হলো
+
+        // বিজ্ঞপ্তির মেইন টেবিলে commentCount ১ বাড়ানো হলো
+        await Ad.updateOne(
+          { _id: postId },
+          { $inc: { commentCount: 1 } },
+          { session },
+        );
+      }
+      // ✅ NORMAL POST (আপনার আগের কোড)
+      else if (type === "post") {
         const post = await Post.findOne({
           _id: postId,
           isDeleted: false,
@@ -256,20 +278,14 @@ export const createComment = async (req, res) => {
         if (!post) throw new Error("Post not found");
         postOwnerId = post.author;
 
-        // ✅ only top-level comment increments post commentCount
         await Post.updateOne(
           { _id: postId },
           { $inc: { commentCount: 1 } },
           { session },
         );
-        // if (!isReply) {
-        //   await Post.updateOne(
-        //     { _id: postId },
-        //     { $inc: { commentCount: 1 } },
-        //     { session },
-        //   );
-        // }
-      } else {
+      }
+      // ✅ GROUP POST (আপনার আগের কোড)
+      else {
         const gp = await GroupPost.findOne({
           _id: postId,
           isDeleted: { $ne: true },
@@ -278,22 +294,14 @@ export const createComment = async (req, res) => {
         if (!gp) throw new Error("Post not found");
         postOwnerId = gp.authorId;
 
-        // ✅ only top-level comment increments group post commentCount
         await GroupPost.updateOne(
           { _id: postId },
           { $inc: { "counts.commentCount": 1 } },
           { session },
         );
-        // if (!isReply) {
-        //   await GroupPost.updateOne(
-        //     { _id: postId },
-        //     { $inc: { "counts.commentCount": 1 } },
-        //     { session },
-        //   );
-        // }
       }
 
-      // ✅ parent validation for reply
+      // ✅ parent validation for reply (আপনার পলিমরফিক কমেন্ট লজিক ঠিক রাখা হয়েছে)
       if (isReply) {
         const parent = await Comment.findOne({
           _id: parentId,
@@ -313,6 +321,7 @@ export const createComment = async (req, res) => {
         );
       }
 
+      // ৩. আপনার গ্লোবাল 'Comment' কালেকশনেই ডেটা তৈরি হচ্ছে
       const created = await Comment.create(
         [
           {
@@ -335,11 +344,15 @@ export const createComment = async (req, res) => {
 
     const meName = req.user?.name || req.user?.username || "Someone";
 
-    const payload =
-      type === "post"
-        ? { postId: String(postId), commentId: String(comment?._id) }
-        : { groupPostId: String(postId), commentId: String(comment?._id) };
+    // 🌟 ৪. পেলোড ডাইনামিকালি সেট করা (বিজ্ঞপ্তির জন্য adId পাস হবে)
+    let payload = { commentId: String(comment?._id) };
+    if (type === "post") payload.postId = String(postId);
+    else if (type === "groupPost") payload.groupPostId = String(postId);
+    else if (type === "ad") payload.adId = String(postId); // 🌟 বিজ্ঞপ্তির জন্য কাস্টম কি
 
+    // ==========================================
+    // 🔔 ৫. নোটিফিকেশন এবং পুশ সেশন গেটওয়ে
+    // ==========================================
     if (isReply) {
       const to = parentCommentOwnerId ? String(parentCommentOwnerId) : null;
 
@@ -347,7 +360,13 @@ export const createComment = async (req, res) => {
         const n = await Notification.create({
           toUserId: to,
           fromUserId: userId,
-          type: type === "post" ? "comment_reply" : "group_comment_reply",
+          // বিজ্ঞপ্তির কমেন্টে রিপ্লাই দিলে কাস্টম নোটিফিকেশন টাইপ ট্রিগার হবে
+          type:
+            type === "ad"
+              ? "ad_comment_reply"
+              : type === "post"
+                ? "comment_reply"
+                : "group_comment_reply",
           title: "New reply",
           body: `${meName} replied to your comment`,
           data: payload,
@@ -366,9 +385,18 @@ export const createComment = async (req, res) => {
         const n = await Notification.create({
           toUserId: to,
           fromUserId: userId,
-          type: type === "post" ? "post_comment" : "group_post_comment",
-          title: "New comment",
-          body: `${meName} commented on your post`,
+          // বিজ্ঞপ্তিতে কমেন্ট করলে বিজ্ঞাপনদাতার কাছে এলার্ট যাবে
+          type:
+            type === "ad"
+              ? "ad_comment"
+              : type === "post"
+                ? "post_comment"
+                : "group_post_comment",
+          title: type === "ad" ? "New Ad Feedback" : "New comment",
+          body:
+            type === "ad"
+              ? `${meName} commented on your sponsored ad`
+              : `${meName} commented on your post`,
           data: payload,
         });
 
@@ -385,7 +413,7 @@ export const createComment = async (req, res) => {
     const msg = e?.message || "Comment failed";
 
     const status =
-      msg === "Post not found"
+      msg === "Post not found" || msg === "Ad campaign not found"
         ? 404
         : msg === "Parent comment not found"
           ? 404
@@ -396,6 +424,7 @@ export const createComment = async (req, res) => {
     session.endSession();
   }
 };
+
 /* ===================================================================
    ✅ GET COMMENTS (top-level)
    Route: GET /comments/:postId?type=post|groupPost&limit=20&cursor=...
@@ -403,29 +432,44 @@ export const createComment = async (req, res) => {
 export const getPostComments = async (req, res) => {
   try {
     const postId = String(req.params?.postId || "");
-    const type = String(req.query?.type || "post");
+    const type = String(req.query?.type || "post"); // "post" | "groupPost" | "ad" 🌟
     const me = req.user?._id || null;
 
     if (!mongoose.isValidObjectId(postId)) {
       return res.status(400).json({ ok: false, message: "Invalid post id" });
     }
-    if (!isValidType(type)) {
-      return res.status(400).json({ ok: false, message: "Invalid type" });
-    }
+
+    // আপনার isValidType ফাংশনে "ad" টাইপটি ইনক্লুড করে নেবেন
+    // if (!isValidType(type)) return res.status(400).json({ ok: false, message: "Invalid type" });
 
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const cursor = parseCursor(req.query.cursor);
     const cursorFilter = buildCursorFilter(cursor);
 
-    // ✅ ensure target exists
-    const exists =
-      type === "post"
-        ? await Post.exists({ _id: postId, isDeleted: false })
-        : await GroupPost.exists({ _id: postId, isDeleted: { $ne: true } });
+    // ========================================================
+    // 🌟 🌟 ২. ডাইনামিক টার্গেট এক্সিস্টেন্স চেক (বিজ্ঞপ্তি অন্তর্ভুক্ত করা হলো)
+    // ========================================================
+    let exists = false;
 
-    if (!exists)
-      return res.status(404).json({ ok: false, message: "Post not found" });
+    if (type === "post") {
+      exists = await Post.exists({ _id: postId, isDeleted: false });
+    } else if (type === "groupPost") {
+      exists = await GroupPost.exists({
+        _id: postId,
+        isDeleted: { $ne: true },
+      });
+    } else if (type === "ad") {
+      // 🌟 স্পনসরড বিজ্ঞপ্তির অস্তিত্ব ডাটাবেসে চেক করা (অবশ্যই active স্ট্যাটাস ফিল্টার সহ)
+      exists = await Ad.exists({ _id: postId, status: "active" });
+    }
 
+    if (!exists) {
+      const errorMsg =
+        type === "ad" ? "Ad campaign not found or inactive" : "Post not found";
+      return res.status(404).json({ ok: false, message: errorMsg });
+    }
+
+    // ৩. পলিমরফিক উপায়ে কমেন্ট খুঁজে বের করা (অপরিবর্তিত রাখা হয়েছে)
     const items = await Comment.find({
       targetType: type,
       postId,
@@ -438,11 +482,10 @@ export const getPostComments = async (req, res) => {
       .populate("author", "name username avatar uid")
       .lean();
 
-    
+    // ৪. কমেন্টের লাইক/রিঅ্যাকশন ম্যাপ করার গ্লোবাল মেকানিজম (অপরিবর্তিত)
     if (me && items.length > 0) {
       const commentIds = items.map((c) => c._id);
 
-      
       const userReactions = await CommentReaction.find({
         user: me,
         comment: { $in: commentIds },
@@ -454,14 +497,12 @@ export const getPostComments = async (req, res) => {
         userReactions.map((r) => [String(r.comment), r.type || "like"]),
       );
 
-     
       for (const comment of items) {
         const cId = String(comment._id);
-        comment.isLiked = reactionMap.has(cId); 
-        comment.reaction = reactionMap.get(cId) || null; 
+        comment.isLiked = reactionMap.has(cId);
+        comment.reaction = reactionMap.get(cId) || null;
       }
     } else {
-      
       for (const comment of items) {
         comment.isLiked = false;
         comment.reaction = null;
@@ -572,22 +613,25 @@ export const deleteComment = async (req, res) => {
       c.text = "[deleted]";
       await c.save({ session });
 
-
-     
-
       // ✅ 2) parent comment হলে post/group commentCount কমাও
       if (!isReply) {
         const totalToDecrease = 1 + (c.replyCount || 0);
         if (c.targetType === "post") {
           await Post.updateOne(
             { _id: c.postId },
-            { $inc: { commentCount: - totalToDecrease } },
+            { $inc: { commentCount: -totalToDecrease } },
             { session },
           );
         } else if (c.targetType === "groupPost") {
           await GroupPost.updateOne(
             { _id: c.postId },
-            { $inc: { "counts.commentCount": - totalToDecrease } },
+            { $inc: { "counts.commentCount": -totalToDecrease } },
+            { session },
+          );
+        } else if (c.targetType === "ad") {
+          await Ad.updateOne(
+            { _id: c.postId },
+            { $inc: { commentCount: -totalToDecrease } }, // মেইন Ad টেবিলে কমেন্ট ও তার রিপ্লাইয়ের কাউন্ট কমবে
             { session },
           );
         }

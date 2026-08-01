@@ -1,28 +1,47 @@
 import PostShare from "../../models/post/postShare.model.js";
 import Post from "../../models/post/post.model.js";
+import Ad from "../../models/ads/ad.model.js"; 
 import mongoose from "mongoose";
 
 export const sharePost = async (req, res) => {
   try {
     const me = req.user?._id;
-    const postId = req.params.postId;
+    const postId = req.params.postId; // বিজ্ঞপ্তির ক্ষেত্রে এটি adId হবে
+    const type = String(req.query.type || "post").toLowerCase(); // post অথবা ad
 
     if (!me) return res.status(401).json({ message: "Unauthorized" });
-    if (!mongoose.isValidObjectId(postId))
+    if (!mongoose.isValidObjectId(postId)) {
       return res.status(400).json({ message: "Invalid postId" });
+    }
 
+    // 🌟 ১. আপনার নতুন ডাইনামিক মডেল স্ট্রাকচার অনুযায়ী মঙ্গুজকে কালেকশন টাইপ চেনাচ্ছি
+    const targetModel = type === "ad" ? "Ad" : "Post";
+
+    // 🌟 ২. আপসার্ট (Upsert) রেকর্ড তৈরি হচ্ছে (একই ইউজার বারবার শেয়ার করলে কাউন্ট ডুপ্লিকেট হবে驶)
     const r = await PostShare.updateOne(
-      { post: postId, user: me },
-      { $setOnInsert: { post: postId, user: me } },
-      { upsert: true }
+      { post: postId, user: me, targetType: targetModel },
+      {
+        $setOnInsert: {
+          post: postId,
+          user: me,
+          targetType: targetModel,
+        },
+      },
+      { upsert: true },
     );
 
+    // 🌟 ৩. নতুন শেয়ার এন্ট্রি হলেই কেবল নির্দিষ্ট মেইন টেবিলের shareCount ফিল্ড ১ বৃদ্ধি পাবে
     if (r.upsertedCount === 1) {
-      await Post.updateOne({ _id: postId }, { $inc: { shareCount: 1 } });
+      if (type === "ad") {
+        await Ad.updateOne({ _id: postId }, { $inc: { shareCount: 1 } });
+      } else {
+        await Post.updateOne({ _id: postId }, { $inc: { shareCount: 1 } });
+      }
     }
 
     return res.json({ success: true, shared: true });
   } catch (e) {
+    console.error("Share API Error:", e);
     return res.status(500).json({ message: e?.message || "Share failed" });
   }
 };
@@ -30,14 +49,24 @@ export const sharePost = async (req, res) => {
 export const getPostShares = async (req, res) => {
   try {
     const postId = req.params.postId;
-    if (!mongoose.isValidObjectId(postId))
+    const type = String(req.query.type || "post").toLowerCase(); // post অথবা ad
+
+    if (!mongoose.isValidObjectId(postId)) {
       return res.status(400).json({ message: "Invalid postId" });
+    }
 
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const skip = (page - 1) * limit;
 
-    const rows = await PostShare.find({ post: postId })
+    // 🌟 ১. আপনার নতুন ডাইনামিক মডেল স্ট্রাকচার অনুযায়ী সঠিক targetType ক্যাপিটালাইজেশন করা হলো
+    const targetModel = type === "ad" ? "Ad" : "Post";
+
+    // 🌟 ২. post এবং targetType দুই ফিল্ডেরই নিখুঁত ম্যাচিং কোয়েরি
+    const rows = await PostShare.find({
+      post: postId,
+      targetType: targetModel,
+    })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -45,6 +74,7 @@ export const getPostShares = async (req, res) => {
       .lean();
 
     const users = rows.map((r) => r.user).filter(Boolean);
+
     return res.json({ success: true, page, limit, users });
   } catch (e) {
     return res

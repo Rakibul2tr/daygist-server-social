@@ -13,14 +13,26 @@ export const createAdCampaign = async (req, res) => {
       title,
       description,
       adType,
+      placement, // 🌟 ফ্রন্টএন্ড ট্যাব অনুযায়ী ডাইনামিক প্লেসনেন্ট ("home_feed", "video_player", "popup")
       ctaLink,
       ctaText,
       total_budget_usd,
       duration,
       isSkippable,
       skipAfter,
+      startDate,
+      age,
+      gender,
+      endDate,
+      country,
+      adCategory,
     } = req.body;
-    const advertiserId = req.user._id;
+
+    const advertiserId = req.user?._id || req.user?.id;
+
+    if (!advertiserId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
 
     const advertiser = await User.findById(advertiserId);
     if (!advertiser) {
@@ -29,51 +41,93 @@ export const createAdCampaign = async (req, res) => {
         .json({ success: false, message: "Advertiser not found" });
     }
 
-    // ১. চেক করা যে বিজ্ঞাপনদাতার ওয়ালেটে পর্যাপ্ত ডলার (USD) আছে কিনা
-    if (advertiser.balance < Number(total_budget_usd)) {
+    // ১. চেক করা যে বিজ্ঞাপনদাতার ওয়ালেটে পর্যাপ্ত ব্যালেন্স আছে কিনা
+    // (আপনার ইউজার মডেলে ব্যালেন্স ফিল্ডের নাম 'balance' বা 'usd_balance' যা আছে তা সিঙ্ক রাখবেন)
+    const currentBalance = Number(
+      advertiser.balance || advertiser.usd_balance || 0,
+    );
+    if (currentBalance < Number(total_budget_usd)) {
       return res
         .status(400)
         .json({ success: false, message: "Insufficient USD balance" });
     }
 
     // ২. বিজ্ঞাপনদাতার ওয়ালেট থেকে মেইন ডলার কেটে নেওয়া
+    const balanceField =
+      advertiser.usd_balance !== undefined ? "usd_balance" : "balance";
     await User.findByIdAndUpdate(advertiserId, {
-      $inc: { balance: -Number(total_budget_usd) }, // মেইন অ্যাকাউন্ট থেকে ডলার মাইনাস হলো
+      $inc: { [balanceField]: -Number(total_budget_usd) },
     });
 
-    // 🌟 ৩. নতুন ট্রানজেকশন হিস্ট্রি রেকর্ড তৈরি করা
+    // ৩. নতুন ট্রানজেকশন হিস্ট্রি রেকর্ড তৈরি করা (own মোডে ইনস্ট্যান্ট কমপ্লিট)
     await Transaction.create({
       userId: advertiserId,
-      type: "own", // বিজ্ঞাপনদাতার নিজের ক্যাম্পেইনের জন্য খরচ
+      type: "own",
       amount: Number(total_budget_usd),
       reference: `Created Ad Campaign: ${title?.slice(0, 30)}`,
-      status: "completed", // ওন মোডে ইনস্ট্যান্ট কমপ্লিট হয়ে যাবে
+      status: "completed",
     });
 
-    // 🌟 ৩. ডলারকে কয়েনে কনভার্ট করার মূল হিসাব (1 USD = 100,000 Coins)
+    // ৪. ডলারকে কয়েনে কনভার্ট করার মূল হিসাব (1 USD = 100,000 Coins)
     const totalBudgetInCoins = Number(total_budget_usd) * 100000;
 
-    // ৪. কাস্টম অ্যাড তৈরি এবং সেভ (বাজেট সেভ হবে কয়েন হিসেবে)
+    // 🌟 🌟 ৫. নতুন কাস্টমাইজড মডেল অনুযায়ী অবজেক্ট ডাটা সেভ 🌟 🌟
     const newAd = new Ad({
       advertiserId,
       title,
       description,
       adType,
+      adCategory: adCategory,
+      placement: placement || "home_feed", // আপনার কাস্টম ডাবল ট্যাব প্লেসমেন্ট লজিক
+
+      // ওয়াসাবি ক্লাউড মিডিয়া অবজেক্ট
       media: {
-        url: req.body.mediaUrl, // আপনার ওয়াসাবি ক্লাউড ইউআরএল লজিক
-        key: req.body.mediaKey,
+        url: req.body.mediaUrl || (req.body.media && req.body.media.url),
+        key: req.body.mediaKey || (req.body.media && req.body.media.key),
+        provider: "wasabi",
       },
+
+      // ভিডিও অ্যাডের কাভার থাম্বনেইল অবজেক্ট (যদি ফ্রন্টএন্ড থেকে আসে)
+      thumbnail: {
+        url:
+          req.body.thumbnail ||
+          (req.body.thumbnail && req.body.thumbnail.url) ||
+          null,
+        key:
+          req.body.thumbnail ||
+          (req.body.thumbnail && req.body.thumbnail.key) ||
+          null,
+        provider: "wasabi",
+      },
+
       ctaLink,
-      ctaText,
-      total_budget: totalBudgetInCoins, // কয়েন হিসেবে সেভ হলো
-      remaining_budget: totalBudgetInCoins, // কয়েন হিসেবে সেভ হলো
-      cost_per_view: 1, // প্রতি ক্লিকে বা স্কিপে ১ কয়েন কাটবে (fixed)
-      duration,
-      isSkippable,
-      skipAfter,
+      ctaText: ctaText || "Learn More",
+      status: "active", // নতুন অ্যাড তৈরি হওয়া মাত্রই বাই-ডিফল্ট 'active' হবে
+
+      total_budget: totalBudgetInCoins,
+      remaining_budget: totalBudgetInCoins,
+      cost_per_view: 1, // প্রতি ভিউ, স্কিপ বা ক্লিকে সরাসরি ১ কয়েন ডিডাক্ট হবে
+
+      duration: Number(duration) || 0,
+      isSkippable: isSkippable !== undefined ? isSkippable : true,
+      skipAfter: Number(skipAfter) || 5,
+      age: age || "everyone",
+      gender: Array.isArray(gender) ? gender : ['male'],
+      country: Array.isArray(country) ? country : ['Bangladesh'],
+      // নতুন মডেলের কাউন্টার ও ট্র্যাকিং জিরো দিয়ে ইনিশিয়ালাইজ করা হলো
+      impressions: 0,
+      clicks: 0,
+      likeCount: 0,
+      commentCount: 0,
+      shareCount: 0,
+      updateReason: "", // নতুন অ্যাডের জন্য কোনো রিজন থাকবে না
+
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
     });
 
     await newAd.save();
+    console.log("New Ad Campaign Created:", newAd);
 
     return res.status(201).json({
       success: true,
@@ -81,7 +135,13 @@ export const createAdCampaign = async (req, res) => {
       data: newAd,
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    console.error("Create Ad Campaign Error:", error);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to create campaign",
+      });
   }
 };
 
@@ -192,15 +252,48 @@ export const renewAdCampaign = async (req, res) => {
  */
 export const getAdsForUsers = async (req, res) => {
   try {
-    // 🌟 প্লেসমেন্ট ফিল্ডটি সম্পূর্ণ রিমুভ করা হয়েছে
+    const userId = req.user?._id;
+
+    const user = await User.findById(userId)
+      .select("country gender age")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+    const isAdult = user.age >= 18;
 
     // ডাটাবেস থেকে শুধু অ্যাক্টিভ এবং কয়েন বাজেট থাকা বিজ্ঞাপন খুঁজুন
     const query = {
       status: "active",
       remaining_budget: { $gt: 0 },
+
+      $and: [
+        {
+          $or: [{ country: { $size: 0 } }, { country: user.country }],
+        },
+
+        {
+          $or: [{ gender: { $size: 0 } }, { gender: user.gender }],
+        },
+
+        {
+          $or: [
+            { age: "everyone" },
+            {
+              age: isAdult ? "adult" : "under_adult",
+            },
+          ],
+        },
+      ],
     };
 
-    const activeAds = await Ad.find(query);
+    const activeAds = await Ad.find(query)
+      .populate("advertiserId", "name avatar")
+      .lean();
 
     if (!activeAds || activeAds.length === 0) {
       return res.status(200).json({
@@ -496,7 +589,7 @@ export const deleteAdCampaign = async (req, res) => {
     }
 
     // ৫. ✅ ওয়াসাবি স্টোরেজ থেকে মিডিয়া ফাইলটি চিরতরে মুছে ফেলা (আপনার মেথড অনুযায়ী)
-    if (ad.media && ad.media.key) {
+    if (ad.media && ad.media.key && ad.adCategory=='other') {
       try {
         const keys = [ad.media.key];
 

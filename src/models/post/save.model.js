@@ -11,7 +11,7 @@ const saveSchema = new mongoose.Schema(
 
     targetType: {
       type: String,
-      enum: ["post", "groupPost"],
+      enum: ["post", "groupPost","ad"],
       required: true,
       index: true,
     },

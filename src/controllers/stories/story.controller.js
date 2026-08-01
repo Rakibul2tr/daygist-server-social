@@ -178,28 +178,28 @@ export const getUserStories = async (req, res) => {
       .select("storyId userId reaction")
       .lean();
 
-      const reactionMap = new Map();
-      const myReactionMap = new Map();
+    const reactionMap = new Map();
+    const myReactionMap = new Map();
 
-      for (const r of reactions) {
-        const key = String(r.storyId);
+    for (const r of reactions) {
+      const key = String(r.storyId);
 
-        if (!reactionMap.has(key)) {
-          reactionMap.set(key, {
-            total: 0,
-            reactions: {},
-          });
-        }
-
-        const item = reactionMap.get(key);
-
-        item.total += 1;
-        item.reactions[r.reaction] = (item.reactions[r.reaction] || 0) + 1;
-
-        if (String(r.userId) === String(me)) {
-          myReactionMap.set(key, r.reaction);
-        }
+      if (!reactionMap.has(key)) {
+        reactionMap.set(key, {
+          total: 0,
+          reactions: {},
+        });
       }
+
+      const item = reactionMap.get(key);
+
+      item.total += 1;
+      item.reactions[r.reaction] = (item.reactions[r.reaction] || 0) + 1;
+
+      if (String(r.userId) === String(me)) {
+        myReactionMap.set(key, r.reaction);
+      }
+    }
 
     const countMap = new Map(viewCounts.map((v) => [String(v._id), v.count]));
 
@@ -256,8 +256,12 @@ export const markStorySeen = async (req, res) => {
         viewerId: me,
       },
       {
+        $set: {
+          updatedAt: new Date(),
+        },
         $setOnInsert: {
           storyId: story._id,
+          ownerId: story.userId, // ✅ add
           viewerId: me,
         },
       },
@@ -265,47 +269,11 @@ export const markStorySeen = async (req, res) => {
         upsert: true,
       },
     );
+    // console.log("story view", res);
 
     return res.json({ success: true });
   } catch (e) {
     return res.status(500).json({ message: e?.message || "Mark seen failed" });
-  }
-};
-
-// DELETE STORY
-export const deleteStory = async (req, res) => {
-  try {
-    const me = req.user?._id;
-    const id = req.params.id;
-
-    if (!me) return res.status(401).json({ message: "Unauthorized" });
-    if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ message: "Invalid id" });
-
-    const story = await Story.findById(id);
-    if (!story || story.isDeleted)
-      return res.status(404).json({ message: "Story not found" });
-
-    if (String(story.userId) !== String(me)) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-
-    // ✅ soft delete (or hard delete)
-    story.isDeleted = true;
-    await story.save();
-
-    // ✅ OPTIONAL: delete media from Wasabi (only if key exists)
-    const key = story?.media?.key;
-    const provider = story?.media?.provider;
-    if (key && provider === "wasabi") {
-      await deleteFromWasabi(key).catch(() => {});
-    }
-
-    return res.json({ success: true });
-  } catch (e) {
-    return res
-      .status(500)
-      .json({ message: e?.message || "Delete story failed" });
   }
 };
 
@@ -329,6 +297,7 @@ export const getStoryFeed = async (req, res) => {
     const ownerObjIds = ownerIds
       .filter(mongoose.isValidObjectId)
       .map((id) => new mongoose.Types.ObjectId(id));
+    
 
     const rows = await Story.aggregate([
       {
@@ -390,8 +359,11 @@ export const getStoryFeed = async (req, res) => {
       // join seen table
       {
         $lookup: {
-          from: "storyseens",
-          let: { ownerId: "$ownerId" },
+          from: "storyviews",
+          let: {
+            ownerId: "$ownerId",
+          },
+
           pipeline: [
             {
               $match: {
@@ -403,30 +375,38 @@ export const getStoryFeed = async (req, res) => {
                 },
               },
             },
-            { $project: { _id: 0, lastSeenAt: 1 } },
+            {
+              $sort: {
+                updatedAt: -1,
+              },
+            },
+            {
+              $limit: 1,
+            },
           ],
           as: "seen",
         },
       },
+     
       {
         $addFields: {
           seenAt: {
-            $ifNull: [{ $arrayElemAt: ["$seen.lastSeenAt", 0] }, null],
+            $arrayElemAt: ["$seen.updatedAt", 0],
           },
+        },
+      },
+      {
+        $addFields: {
           isSeen: {
-            $cond: [
-              {
-                $and: [
-                  { $ne: ["$ownerId", meObjId] },
-                  { $ne: ["$seenAt", null] },
-                  { $gte: ["$seenAt", "$lastItemAt"] },
-                ],
-              },
-              true,
-              false,
+            $and: [
+              { $ne: ["$ownerId", meObjId] },
+              { $ne: ["$seenAt", null] },
+              { $gte: ["$seenAt", "$lastItemAt"] },
             ],
           },
-          isMe: { $eq: ["$ownerId", meObjId] },
+          isMe: {
+            $eq: ["$ownerId", meObjId],
+          },
         },
       },
 
@@ -457,6 +437,7 @@ export const getStoryFeed = async (req, res) => {
       // unseen first (except me)
       { $sort: { isMe: -1, isSeen: 1, lastItemAt: -1 } },
     ]);
+    // console.log("rows", rows);
 
     const nextCursor =
       rows.length > 0
@@ -469,6 +450,42 @@ export const getStoryFeed = async (req, res) => {
     return res.json({ success: true, items: rows, nextCursor });
   } catch (e) {
     return res.status(500).json({ message: e?.message || "Story feed failed" });
+  }
+};
+// DELETE STORY
+export const deleteStory = async (req, res) => {
+  try {
+    const me = req.user?._id;
+    const id = req.params.id;
+
+    if (!me) return res.status(401).json({ message: "Unauthorized" });
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ message: "Invalid id" });
+
+    const story = await Story.findById(id);
+    if (!story || story.isDeleted)
+      return res.status(404).json({ message: "Story not found" });
+
+    if (String(story.userId) !== String(me)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    // ✅ soft delete (or hard delete)
+    story.isDeleted = true;
+    await story.save();
+
+    // ✅ OPTIONAL: delete media from Wasabi (only if key exists)
+    const key = story?.media?.key;
+    const provider = story?.media?.provider;
+    if (key && provider === "wasabi") {
+      await deleteFromWasabi(key).catch(() => {});
+    }
+
+    return res.json({ success: true });
+  } catch (e) {
+    return res
+      .status(500)
+      .json({ message: e?.message || "Delete story failed" });
   }
 };
 
@@ -540,9 +557,6 @@ export const reactToStory = async (req, res) => {
     const me = req.user?._id;
     const storyId = req.params.id;
     const { reaction } = req.body;
-
-
-    
 
     if (!me) {
       return res.status(401).json({

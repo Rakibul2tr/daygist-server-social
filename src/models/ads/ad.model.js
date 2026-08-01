@@ -15,6 +15,11 @@ const adSchema = new mongoose.Schema(
       required: true,
       enum: ["image", "video"],
     },
+    adCategory: {
+      type: String,
+      required: true,
+      enum: ["ecommerce", "other"],
+    },
     // 🌟 ওয়াসাবি স্টোরেজ অবজেক্ট স্ট্রাকচার
     media: {
       url: { type: String, required: true },
@@ -42,11 +47,21 @@ const adSchema = new mongoose.Schema(
       enum: ["active", "paused", "expired", "out_of_budget"],
       default: "active",
     },
+    gender: {
+      type: [String],
+      enum: ["male", "female", "other"],
+      default: [],
+    },
+    age: {
+      type: String,
+      enum: ["everyone", "adult", "under_adult"],
+      default: "everyone",
+    },
 
     // 📝 Mongoose টাইপ ডিফাইন করা হয়েছে এবং ডিফল্ট ভ্যালু ঠিক করা হয়েছে
     total_budget: { type: Number, required: true, default: 5000 },
     remaining_budget: { type: Number, required: true, default: 5000 }, // 🌟 নতুন ফিল্ড (বাজেট ট্র্যাকিংয়ের জন্য)
-    cost_per_view: { type: Number, required: true, default: 0.5 },
+    cost_per_view: { type: Number, required: true, default: 1 },
 
     duration: { type: Number, default: 0 }, // ভিডিও অ্যাডের সেকেন্ড (যেমন: ১৫ বা ৩০)
     isSkippable: { type: Boolean, default: true },
@@ -54,7 +69,14 @@ const adSchema = new mongoose.Schema(
 
     impressions: { type: Number, default: 0 }, // কতজন দেখল
     clicks: { type: Number, default: 0 }, // কতজন ক্লিক করল
-
+    likeCount: { type: Number, default: 0 },
+    commentCount: { type: Number, default: 0 },
+    shareCount: { type: Number, default: 0 },
+    updateReason: { type: String, default: "" },
+    country: {
+      type: [String],
+      default: [],
+    },
     startDate: { type: Date },
     endDate: { type: Date },
   },
