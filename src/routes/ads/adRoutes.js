@@ -1,6 +1,7 @@
 import express from "express";
 import { authGuard } from "../../middleware/authMiddleware.js";
-import { createAdCampaign, deleteAdCampaign, getAdsForUsers, getAdvertiserCampaigns, handleAdAction, renewAdCampaign } from "../../controllers/ads/ads.Controller.js";
+import { createAdCampaign, deleteAdCampaign, getAdsForUsers, getAdvertiserCampaigns, handleAdAction, renewAdCampaign, updateAd } from "../../controllers/ads/ads.Controller.js";
+import { getCountryCpcs } from "../../controllers/admin/countryCpc.controller.js";
 
 const router = express.Router();
 
@@ -30,5 +31,8 @@ router.get("/fetch", authGuard, getAdsForUsers);
 router.post("/action/:postId", authGuard, handleAdAction);
 
 router.delete("/delete/:adId", authGuard, deleteAdCampaign);
+
+router.get("/cpc-all", getCountryCpcs);
+router.put("/update/:id", authGuard, updateAd);
 
 export default router;

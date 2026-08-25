@@ -2,6 +2,7 @@ import Cart from "../../models/ecommarce/Cart.model.js";
 import EcomProduct from "../../models/ecommarce/EcomProduct.js";
 import Seller from "../../models/ecommarce/Seller.model.js";
 import User from "../../models/user/user.model.js";
+import { trackEcommerceInterest } from "../../services/ecommerce/ecommerceInterest.service.js";
 
 export const getCart = async (req, res) => {
   try {
@@ -114,6 +115,7 @@ export const getCart = async (req, res) => {
 
 export const addToCart = async (req, res) => {
   const { productId, qty } = req.body;
+  const userId = req.user?._id;
 
   const product = await EcomProduct.findById(productId);
   if (!product || product.status !== "active") {
@@ -134,6 +136,17 @@ export const addToCart = async (req, res) => {
       qty,
     });
   }
+
+    // Track product view
+      if (userId) {
+        trackEcommerceInterest({
+          userId,
+          product: product,
+          action: "add_to_cart",
+        }).catch((err) => {
+          console.error("Ecommerce interest tracking failed:", err);
+        });
+      }
 
   await cart.save();
   res.json(cart);

@@ -1,4 +1,4 @@
-import { getVideoFeed } from "../../services/feed/getVideoFeed.js";
+import { getGeneralVideoFeed, getVideoFeed } from "../../services/feed/getVideoFeed.js";
 
 const parseCursor = (raw) => {
   if (!raw) return null;
@@ -17,7 +17,7 @@ export const getGeneralVideos = async (req, res) => {
     const cursor = parseCursor(req.query.cursor);
     const sub = req.query.subCategory; // optional: islamic/sports/other
 
-    const data = await getVideoFeed({
+    const data = await getGeneralVideoFeed({
       userId,
       limit,
       cursor,

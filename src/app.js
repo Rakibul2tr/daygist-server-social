@@ -18,8 +18,9 @@ import withdrawRoutes from "./routes/withdraw/withdraw.routes.js";
 import pushNotificationRoutes from "./routes/push/push.routes.js";
 import notificationRoutes from "./routes/notification/notification.routes.js";
 import userAdsRoutes from "./routes/admin/adminAds.routes.js";
-// import adsClickRoutes from "./routes/ads/adClick.routes.js";
+import adViewRoutes from "./routes/ads/adView.routes.js";
 import adRoutes from "./routes/ads/adRoutes.js";
+import htmlAdRoutes from "./routes/ads/htmlAd.routes.js";
 import transactionRoutes from "./routes/transaction/transaction.routes.js";
 import supportRoutes from "./routes/support/supportRoutes.js";
 
@@ -47,6 +48,7 @@ import sellerRoutesForAdmin from "./routes/admin/admin.seller.routes.js";
 import AdminWalletSettings from "./routes/admin/walletSettings.routes.js"
 import adminGeneralVideoRoutes from "./routes/admin/adminGeneralVideo.routes.js";
 import settingRoutes from "./routes/admin/adminSetting.routes.js";
+import adminAdsCpcRoutes from "./routes/admin/countryCpc.routes.js";
 
 
 
@@ -78,7 +80,8 @@ app.use("/withdraw", withdrawRoutes);
 app.use("/pushNotification", pushNotificationRoutes);
 app.use("/notification", notificationRoutes);
 // app.use("/users/ads", userAdsRoutes);
-// app.use("/videos/ads", adsClickRoutes);
+app.use("/ads/view", adViewRoutes);
+app.use("/html-ads", htmlAdRoutes);
 app.use("/videos/ads", adRoutes);
 app.use("/transaction", transactionRoutes);
 app.use("/support", supportRoutes);
@@ -115,6 +118,7 @@ app.use("/admin",sellerRoutesForAdmin)
 
 //admin ads route
 app.use("/admin",adminAdsRoutes)
+app.use("/admin",adminAdsCpcRoutes)
 //admin wallet-settings
 app.use("/admin",AdminWalletSettings)
 

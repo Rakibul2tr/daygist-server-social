@@ -6,6 +6,7 @@ import Post from "../../models/post/post.model.js";
 import Transaction from "../../models/transaction/transaction.model.js";
 import { deleteManyFromWasabi } from "../../services/wbUpload.service.js";
 import VideoClick from "../../models/post/videoClick.model.js";
+import CountryCpc from "../../models/countryCpc/countryCpc.model.js";
 
 export const createAdCampaign = async (req, res) => {
   try {
@@ -102,7 +103,7 @@ export const createAdCampaign = async (req, res) => {
 
       ctaLink,
       ctaText: ctaText || "Learn More",
-      status: "active", // নতুন অ্যাড তৈরি হওয়া মাত্রই বাই-ডিফল্ট 'active' হবে
+      status: "pending", // নতুন অ্যাড তৈরি হওয়া মাত্রই বাই-ডিফল্ট 'pending' হবে
 
       total_budget: totalBudgetInCoins,
       remaining_budget: totalBudgetInCoins,
@@ -111,7 +112,7 @@ export const createAdCampaign = async (req, res) => {
       duration: Number(duration) || 0,
       isSkippable: isSkippable !== undefined ? isSkippable : true,
       skipAfter: Number(skipAfter) || 5,
-      age: age || "everyone",
+      age: age || "all",
       gender: Array.isArray(gender) ? gender : ['male'],
       country: Array.isArray(country) ? country : ['Bangladesh'],
       // নতুন মডেলের কাউন্টার ও ট্র্যাকিং জিরো দিয়ে ইনিশিয়ালাইজ করা হলো
@@ -184,7 +185,10 @@ export const renewAdCampaign = async (req, res) => {
     ) {
       return res
         .status(400)
-        .json({ success: false, message: "দয়া করে সঠিক ডলার অ্যামাউন্ট দিন" });
+        .json({
+          success: false,
+          message: "Please enter the exact dollar amount",
+        });
     }
 
     // ক) বিজ্ঞাপনদাতার মেইন অ্যাকাউন্ট ব্যালেন্স চেক করা
@@ -199,7 +203,7 @@ export const renewAdCampaign = async (req, res) => {
     if (advertiser.balance < Number(renew_budget_usd)) {
       return res.status(400).json({
         success: false,
-        message: `আপনার ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই। প্রয়োজনীয়: $${renew_budget_usd}`,
+        message: `You do not have enough balance in your wallet. Required: $${renew_budget_usd}`,
       });
     }
 
@@ -231,13 +235,13 @@ export const renewAdCampaign = async (req, res) => {
     // চ) বিজ্ঞপ্তির total_budget এবং remaining_budget-এ কয়েন যোগ করা এবং স্ট্যাটাস active করা
     ad.total_budget += newCoins;
     ad.remaining_budget += newCoins;
-    ad.status = "active"; // বাজেট শেষ হয়ে out_of_budget থাকলে তা আবার active হবে
+    ad.status = "pending"; // বাজেট শেষ হয়ে out_of_budget থাকলে তা আবার active হবে
 
     await ad.save();
 
     return res.status(200).json({
       success: true,
-      message: `ক্যাম্পেইন সফলভাবে রিনিউ হয়েছে! আরও ${newCoins} কয়েন যুক্ত করা হয়েছে।`,
+      message: `Renew success ${newCoins} added`,
       data: ad,
     });
   } catch (error) {
@@ -348,8 +352,8 @@ export const handleAdAction = async (req, res) => {
       });
     }
 
-  // কেস ১: ভিডিও শেষ হয়েছে (action === "end") -> টাকা বা কয়েন কাটবে না, শুধু ইম্প্রেশন বাড়বে
-  
+    // কেস ১: ভিডিও শেষ হয়েছে (action === "end") -> টাকা বা কয়েন কাটবে না, শুধু ইম্প্রেশন বাড়বে
+
     if (action === "end") {
       ad.impressions += 1;
       await ad.save();
@@ -357,6 +361,24 @@ export const handleAdAction = async (req, res) => {
         success: true,
         counted: true,
         message: "End view recorded.",
+      });
+    }
+
+    const user = await User.findById(clickedBy).select("country");
+    const countryCpc = await CountryCpc.findOne({
+      code: user.country,
+      isActive: true,
+    }).select("cpc");
+    // adCategory অনুযায়ী CPC select
+    const cpcUsd =
+      ad.adCategory === "ecommerce"
+        ? Number(countryCpc.cpc?.daygist || 0)
+        : Number(countryCpc.cpc?.others || 0);
+
+    if (cpcUsd <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: `CPC is not configured for ${ad.adCategory}`,
       });
     }
 
@@ -399,11 +421,11 @@ export const handleAdAction = async (req, res) => {
 
         // 💡 টিপস: আপনার মেইন 'Post' বা ভিডিও টেবিলে যদি click/view কাউন্টার ফিল্ড থাকে,
         // তবে নিচের কোডটি দিয়ে সেই ভিডিওর মেইন ভিউ কাউন্টও ১ বাড়িয়ে দিতে পারেন:
-         await Post.findByIdAndUpdate(postId, { $inc: { videoClickCount: 1 } });
+        await Post.findByIdAndUpdate(postId, { $inc: { videoClickCount: 1 } });
       }
 
       // ঘ) ভিডিও ক্রিয়েটরের ওয়ালেটে সরাসরি সেই ১ কয়েন যোগ করা
-      const coinPerClick = 1;
+      const coinPerClick = cpcUsd * 100000; // 1 USD = 100,000 Coins
 
       const wallet = await Wallet.findOneAndUpdate(
         { userId: videoAuthor },
@@ -432,7 +454,7 @@ export const handleAdAction = async (req, res) => {
         counted: true,
         actionType: action,
         coinTransferred: coinPerClick,
-        adRemainingCoins: ad.remaining_budget,
+        adRemainingCoins: (ad.remaining_budget -= coinPerClick),
       });
     }
 
@@ -618,3 +640,103 @@ export const deleteAdCampaign = async (req, res) => {
     return res.status(500).json({ success: false, message: "সার্ভার সমস্যা" });
   }
 };
+
+
+
+// 👥 সাধারণ ইউজারদের জন্য ডাইনামিক বিজ্ঞাপন এডিট কন্ট্রোলার
+export const updateAd = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?._id || req.user?.id;
+
+    // ১. প্রাথমিক সিকিউরিটি ও আইডি ভ্যালিডেশন
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Ad ID format" });
+    }
+
+    // ২. ডাটাবেস থেকে আগে কারেন্ট বিজ্ঞাপনটি খুঁজে বের করা
+    const adCampaign = await Ad.findById(id);
+    if (!adCampaign) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Ad campaign not found" });
+    }
+
+    // 🌟 ৩. ওনারশিপ চেক (শুধুমাত্র বিজ্ঞপ্তির আসল মালিকই এডিট করতে পারবে)
+    if (String(adCampaign.advertiserId) !== String(userId)) {
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "Forbidden: You do not own this campaign",
+        });
+    }
+
+    // ৪. ডাইনামিক ফিল্ড ফিল্টারিং (ইউজার যা দেবে শুধু সেটাই রাইট হবে) [১]
+    const updateFields = {};
+    const allowedFields = [
+      "title",
+      "description",
+      "ctaLink",
+      "ctaText",
+      "placement",
+      "total_budget",
+      "remaining_budget",
+      "duration",
+      "isSkippable",
+      "skipAfter",
+      "gender",
+      "country",
+      "age",
+      "media",
+      "thumbnail",
+    ];
+
+    // লুপ চালিয়ে ফ্রন্টএন্ড বডির সমস্ত অনুমোদিত ডেটা অ্যাসাইন করা হচ্ছে [১]
+    Object.keys(req.body).forEach((key) => {
+      if (allowedFields.includes(key) && req.body[key] !== undefined) {
+        // স্ট্রিং ডাটা হলে ট্রিম (Trim) করা হচ্ছে, অন্যথায় অবজেক্ট/অ্যারে হুবহু সেভ হবে [১]
+        updateFields[key] =
+          typeof req.body[key] === "string"
+            ? req.body[key].trim()
+            : req.body[key];
+      }
+    });
+
+    // 🌟 🌟 ৫. সিকিউরিটি গেটওয়ে: ইউজার এডিট করলে স্ট্যাটাস অটোমেটিক 'pending' হবে 🌟 🌟
+    // এর ফলে ইউজার লাইভ বিজ্ঞাপনে হ্যাকিং বা ক্ষতিকর লিংক বসালে সেটি অটোমেটিক ফিড থেকে হাইড হয়ে যাবে
+    updateFields.status = "pending";
+    updateFields.activateAt = null; // ওল্ড বাফারিং টাইমার থাকলে তা রিসেট হবে
+    updateFields.updateReason =
+      "Campaign updated by advertiser. Pending admin re-verification.";
+
+    // ৬. ডাটাবেসে ডাইনামিক আপডেট সম্পাদন করা [১]
+    const updatedAd = await Ad.findByIdAndUpdate(
+      id,
+      { $set: updateFields },
+      { new: true, runValidators: true }, // স্কিমার এনাম ভ্যালিডেশন রান করবে [১]
+    ).populate("advertiserId", "name username avatar profilePic");
+
+    return res.json({
+      success: true,
+      message:
+        "Campaign settings updated successfully! Sent for admin re-approval.",
+      data: updatedAd,
+    });
+  } catch (error) {
+    console.error("User Update Ad Error:", error);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to update ad",
+      });
+  }
+};
+

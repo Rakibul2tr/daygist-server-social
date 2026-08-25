@@ -15,6 +15,7 @@ import Save from "../../models/post/save.model.js";
 import Block from "../../models/follow/block.model.js";
 import Ad from "../../models/ads/ad.model.js";
 import User from "../../models/user/user.model.js";
+import HtmlAd from "../../models/ads/htmlAd.model.js";
 
 const toOID = (id) => new mongoose.Types.ObjectId(id);
 
@@ -133,6 +134,41 @@ async function getCircleUserIds(userId) {
     .lean();
 
   return followers.map((x) => new mongoose.Types.ObjectId(x.follower));
+}
+
+function injectHtmlAds(items, htmlAds, interval = 12) {
+  // console.log("html", htmlAds, interval);
+  
+  if (!htmlAds?.length || items.length < interval) {
+    return items;
+  }
+
+  const result = [];
+
+  let adIndex = 0;
+  let postCount = 0;
+
+  for (const item of items) {
+    result.push(item);
+
+    if (item.feedType === "post" || item.feedType === "groupPost") {
+      postCount++;
+    }
+
+    if (postCount === interval) {
+      result.push({
+        feedType: "htmlAd",
+        data: htmlAds[adIndex],
+      });
+
+      adIndex = (adIndex + 1) % htmlAds.length;
+      postCount = 0;
+    }
+  }
+  
+  //  console.log("result ", result);
+
+  return result;
 }
 
 /* ---------------------- MAIN FEED ---------------------- */
@@ -487,19 +523,15 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
 
     let filteredAds = [...ads];
 
-    if (me) {
-      filteredAds = ads.filter((ad) => {
-        console.log({
-          adCountry: ad.country,
-          adGender: ad.gender,
-          adAge: ad.age,
-          userCountry: me.country,
-          userGender: me.gender,
-          userAge: me.age,
-        });
+    const htmlAds = await HtmlAd.find({
+      isActive: true,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
-        return true;
-      });
+      // console.log("htmlAds ", htmlAds);
+
+    if (me) {
       filteredAds = ads.filter((ad) => {
         // ---------- Country ----------
         if (
@@ -576,7 +608,11 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
     feedType: x.feedType,
     data: x,
   }));
-  const finalItems = injectAds(items, filteredAds, 5);
+
+  // const finalItems = injectAds(items, filteredAds, 5);
+  let finalItems = injectAds(items, filteredAds, 5);
+
+  finalItems = injectHtmlAds(finalItems, htmlAds, 12);
  
 
   // 🔥 cursor ONLY from basePosts
@@ -590,8 +626,13 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
     : null;
   // console.log('final items',finalItems);
 
+  // console.log('final items',finalItems);
+  
+
   return { items: finalItems, nextCursor };
 }
+
+
 // export async function getHomeFeed({ userId, limit = 20, cursor }) {
 //   const take = Math.min(Number(limit) || 20, 50);
 //   const overFetch = Math.min(take * 2, 80);

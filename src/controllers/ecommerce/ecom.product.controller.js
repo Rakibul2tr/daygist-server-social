@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import EcomProduct from "../../models/ecommarce/EcomProduct.js";
 import { clampInt, slugify } from "../../utils/ecommerce/ecomHelpers.js";
+import { trackEcommerceInterest } from "../../services/ecommerce/ecommerceInterest.service.js";
 
 const basePublicFilter = {
   isDeleted: false,
@@ -13,6 +14,7 @@ const pickCountry = (req) => {
 
 export const getProductDetails = async (req, res) => {
   try {
+    const userId = req.user?._id;
     const p = await EcomProduct.findOne({
       _id: req.params.id,
       ...basePublicFilter,
@@ -21,6 +23,17 @@ export const getProductDetails = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Product not found" });
+
+    // Track product view
+    if (userId) {
+      trackEcommerceInterest({
+        userId,
+        product: p,
+        action: "view",
+      }).catch((err) => {
+        console.error("Ecommerce interest tracking failed:", err);
+      });
+    }
 
     res.json({ success: true, data: p });
   } catch (e) {

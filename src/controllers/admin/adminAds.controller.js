@@ -125,24 +125,277 @@ export const getActiveAds = async (req, res) => {
   }
 };
 
+
+
+
+export const getAdAudienceMatch = async (req, res) => {
+  try {
+    const { adId } = req.params;
+
+    if (!mongoose.isValidObjectId(adId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Ad ID format" });
+    }
+
+    // ১. ডাটাবেস থেকে বিজ্ঞাপনটির টার্গেটিং ফিল্ডগুলো রিড করা
+    const ad = await Ad.findById(adId).lean();
+    if (!ad) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Ad campaign not found" });
+    }
+
+    // ২. স্কিমা অনুযায়ী ডাইনামিক ইউজার ম্যাচ কন্ডিশন অবজেক্ট তৈরি করা
+    const matchCondition = {
+      isDeleted: false,
+    };
+
+    // 🌟 ক) কান্ট্রি ফিল্টারিং লজিক (Array matching):
+    // অ্যারে খালি না থাকলে ($in দিয়ে ম্যাচ করা হবে, খালি থাকলে 'All Country' বা গ্লোবাল)
+    if (ad.country && ad.country.length > 0) {
+      matchCondition.country = { $in: ad.country };
+    }
+
+    // 🌟 খ) জেন্ডার ফিল্টারিং লজিক (Array matching):
+    // অ্যারে খালি না থাকলে $in দিয়ে ম্যাচ হবে, খালি থাকলে 'All Gender'
+    if (ad.gender && ad.gender.length > 0) {
+      // ফ্রন্টএন্ড বা ডাটাবেসের কেস-সেন্সিটিভিটি সেফ রাখতে ছোট হাতের করা হলো
+      const targetGenders = ad.gender.map((g) => String(g).toLowerCase());
+      matchCondition.gender = { $in: targetGenders };
+    }
+
+    // 🌟 গ) এজ রেঞ্জ ফিল্টারিং লজিক (Enum to Age Breakdown):
+    // ইউজারের বয়স যদি ডাটাবেসে Number হিসেবে থাকে, তবে এনাম রেঞ্জকে গাণিতিক কন্ডিশনে রূপান্তর করা হলো
+    if (ad.age && ad.age !== "all") {
+      switch (ad.age) {
+        case "18-24":
+          matchCondition.age = { $gte: 18, $lte: 24 };
+          break;
+        case "25-34":
+          matchCondition.age = { $gte: 25, $lte: 34 };
+          break;
+        case "35-54":
+          matchCondition.age = { $gte: 35, $lte: 54 };
+          break;
+        case "55+":
+          matchCondition.age = { $gte: 55 };
+          break;
+        default:
+          break;
+      }
+    }
+
+    
+    // 📊 ৩. মঙ্গোডিবি এগ্রিগেশন পাইপলাইন (হাই-স্পিড মেমরি ও কান্ট্রি কাউন্টিং)
+    const analyticsResult = await User.aggregate([
+      // ধাপ ১: কান্ট্রি, জেন্ডার ও এজ রেঞ্জ অনুযায়ী টার্গেটেড ইউজার ফিল্টার
+      { $match: matchCondition },
+
+      // ধাপ ২: পুরুষ, নারী এবং দেশ অনুযায়ী ডাইনামিক গণনা করা
+      {
+        $group: {
+          _id: null,
+          totalMatched: { $sum: 1 },
+
+          // জেন্ডার ভিত্তিক নিখুঁত কাউন্টিং
+          maleCount: {
+            $sum: { $cond: [{ $eq: ["$gender", "male"] }, 1, 0] },
+          },
+          femaleCount: {
+            $sum: { $cond: [{ $eq: ["$gender", "female"] }, 1, 0] },
+          },
+          otherCount: {
+            $sum: { $cond: [{ $eq: ["$gender", "other"] }, 1, 0] },
+          },
+
+          // 🌟 🌟 নতুন যোগ করা হলো: কান্ট্রি ভিত্তিক ডাইনামিক কাউন্ট বাকেট 🌟 🌟
+          // এটি ম্যাচ হওয়া সব ইউজারের কান্ট্রি ফিল্ডকে একটি অ্যারেতে জমা করবে
+          allCountries: { $push: "$country" },
+        },
+      },
+
+      // ধাপ ৩: কান্ট্রি অ্যারেটিকে প্রসেস করে ডাইনামিক অবজেক্টে রূপান্তর করা (যেমন: { "BD": 50, "US": 12 })
+      {
+        $project: {
+          totalMatched: 1,
+          maleCount: 1,
+          femaleCount: 1,
+          otherCount: 1,
+          // জাভাস্ক্রিপ্ট লেভেলের রিডিউসার মেথড মঙ্গোডিবিতেই রান করানো হলো ফাস্ট স্পিডের জন্য
+          countryBreakdown: {
+            $arrayToObject: {
+              $map: {
+                input: { $setIntersection: ["$allCountries"] }, // ইউনিক দেশের নামগুলো আলাদা করা
+                as: "cCode",
+                in: {
+                  k: "$$cCode",
+                  v: {
+                    $size: {
+                      $filter: {
+                        input: "$allCountries",
+                        as: "orig",
+                        cond: { $eq: ["$$orig", "$$cCode"] },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    // ৪. ম্যাচ হওয়া ইউজারদের মধ্য থেকে প্রথম ৫০ জনের প্রোফাইল লিস্ট তুলে আনা (ইউআই-র জন্য)
+    const matchedUsersList = await User.find(matchCondition)
+      .select("name username avatar  gender country age")
+      .limit(50)
+      .lean();
+
+    // ৫. যদি কোনো ইউজারই ক্রাইটেরিয়ার সাথে ম্যাচ না করে
+    if (!analyticsResult.length) {
+      return res.status(200).json({
+        success: true,
+        summary: {
+          totalMatchedUsers: 0,
+          maleMatchCount: 0,
+          femaleMatchCount: 0,
+          otherMatchCount: 0,
+          countryBreakdown:{}
+        },
+        users: [],
+      });
+    }
+
+    const summaryData = analyticsResult[0];
+
+    // ৬. চূড়ান্ত সলিড রেসপন্স ডেলিভারি
+    return res.status(200).json({
+      success: true,
+      adInfo: {
+        title: ad.title,
+        adType: ad.adType,
+        targeting: {
+          countries: ad.country.length > 0 ? ad.country : ["All Countries"],
+          genders: ad.gender.length > 0 ? ad.gender : ["All Genders"],
+          ageGroup: ad.age,
+        },
+      },
+      summary: {
+        totalMatchedUsers: summaryData.totalMatched || 0,
+        maleMatchCount: summaryData.maleCount || 0,
+        femaleMatchCount: summaryData.femaleCount || 0,
+        otherMatchCount: summaryData.otherCount || 0,
+        countryBreakdown: summaryData.countryBreakdown || {},
+      },
+      users: matchedUsersList, // ➔ অডিয়েন্সদের অ্যাভাটার ও নাম রেন্ডার করার ফ্ল্যাট অ্যারে
+    });
+  } catch (error) {
+    console.error("Audience Core Matching Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
 // 🟡 ৪. বিজ্ঞাপন আপডেট করা (Update Ad)
+// 🌟 অ্যাডমিনের জন্য বিজ্ঞাপন ডাইনামিক আপডেট ও স্ট্যাটাস মডারেশন কন্ট্রোলার
 export const updateAd = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ success: false, message: "Invalid Ad ID" });
+    const userId = req.user?._id;
+    const userRole = String(req.user?.role || "").toLowerCase(); // ইউজারের রোল ট্র্যাক করা
+
+    // ক) আইডি এবং অথেনটিকেশন ভ্যালিডেশন
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
+    if (!mongoose.isValidObjectId(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Ad ID format" });
+    }
+
+    // খ) ডাটাবেস থেকে আগে কারেন্ট বিজ্ঞাপনটি খুঁজে বের করা
+    const adCampaign = await Ad.findById(id);
+    if (!adCampaign) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Ad campaign not found" });
+    }
+
+    // গ) ডাইনামিক ফিল্ড কাস্টিং অবজেক্ট তৈরি
+    const updateFields = {};
+
+    // ফ্রন্টএন্ড থেকে আসা সাধারণ টেক্সট ও লিংক ফিল্ডগুলো সেফলি অ্যাসাইন করা [১]
+    if (req.body.title !== undefined)
+      updateFields.title = String(req.body.title).trim();
+    if (req.body.description !== undefined)
+      updateFields.description = String(req.body.description).trim();
+    if (req.body.ctaLink !== undefined)
+      updateFields.ctaLink = String(req.body.ctaLink).trim();
+    if (req.body.ctaText !== undefined)
+      updateFields.ctaText = String(req.body.ctaText).trim();
+    if (req.body.placement !== undefined)
+      updateFields.placement = String(req.body.placement).trim();
+    if (req.body.updateReason !== undefined)
+      updateFields.updateReason = String(req.body.updateReason).trim();
+
+    // ঘ) বাজেট টপ-আপের ডাইনামিক সিঙ্ক (যদি ফ্রন্টএন্ড কয়েন বাজেট ইনক্রিমেন্ট পাঠায়)
+    if (req.body.total_budget !== undefined)
+      updateFields.total_budget = Number(req.body.total_budget);
+    if (req.body.remaining_budget !== undefined)
+      updateFields.remaining_budget = Number(req.body.remaining_budget);
+
+    // 🌟 🌟 ঙ) কড়া সিকিউরিটি গেটওয়ে: স্ট্যাটাস পরিবর্তনের লজিক 🌟 🌟
+    // বডিতে status পাঠানো হয়েছে এবং রিকোয়েস্টকারী ব্যক্তিটি আসলেই একজন "admin" [৩]
+    if (req.body.status !== undefined) {
+      if (userRole === "admin") {
+        updateFields.status = String(req.body.status).trim().toLowerCase();
+      } else {
+        // হ্যাকিং প্রোটেকশন: সাধারণ ইউজার যদি বডিতে স্ট্যাটাস পাঠায়, তবে তার রিকোয়েস্ট ব্লক বা ইগনোর হবে [৩]
+        return res.status(403).json({
+          success: false,
+          message:
+            "Forbidden! Only system administrators can moderate campaign status.",
+        });
+      }
+    }
+
+    // Thumbnail
+    if (req.body.thumbnail !== undefined) {
+      const thumbnail = req.body.thumbnail;
+
+      
+
+      updateFields.thumbnail = {
+        url: thumbnail?.url ? String(thumbnail.url).trim() : "",
+
+        key: thumbnail?.key ? String(thumbnail.key).trim() : "",
+
+        provider: thumbnail?.provider ? String(thumbnail.provider).trim() : "",
+      };
+    }
+
+    // চ) ডাটাবেসে ডাইনামিক আপডেট সম্পাদন করা
     const updatedAd = await Ad.findByIdAndUpdate(
       id,
-      { $set: req.body },
-      { new: true, runValidators: true },
+      { $set: updateFields },
+      { new: true, runValidators: true }, // স্কিমার এনাম ভ্যালিডেশন রান করবে [১]
     );
-    if (!updatedAd) return res.status(404).json({ success: false, message: "Ad not found" });
 
-    return res.json({ success: true, message: "Ad updated successfully", data: updatedAd });
+    return res.json({
+      success: true,
+      message:
+        userRole === "admin"
+          ? "Ad campaign moderated successfully"
+          : "Ad fields updated successfully",
+      data: updatedAd,
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    console.error("Update Ad Controller Error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to update ad" });
   }
 };
 

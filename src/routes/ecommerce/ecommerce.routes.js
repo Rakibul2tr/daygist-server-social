@@ -54,7 +54,7 @@ router.get("/products", listProducts);
 router.get("/products/featured", featured);
 router.get("/products/top-selling", topSelling);
 router.get("/products/new-arrivals", newArrivals);
-router.get("/products/:id", getProductDetails);
+router.get("/products/:id",authGuard, getProductDetails);
 router.post("/products/by-ids", listProductsByIds);
 router.get("/products/:id/related", getRelatedProducts);
 

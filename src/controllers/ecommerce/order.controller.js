@@ -1,7 +1,7 @@
 import Cart from "../../models/ecommarce/Cart.model.js";
 import EcomProduct from "../../models/ecommarce/EcomProduct.js";
 import Order from "../../models/ecommarce/Order.model.js";
-
+import { trackEcommerceInterest } from "../../services/ecommerce/ecommerceInterest.service.js";
 
 // export const placeOrder = async (req, res) => {
 //   const { addressText } = req.body;
@@ -55,7 +55,6 @@ import Order from "../../models/ecommarce/Order.model.js";
 //   res.json(order);
 // };
 
-
 export const placeOrder = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -76,10 +75,10 @@ export const placeOrder = async (req, res) => {
     let subtotal = 0;
 
     const validatedItems = [];
-    let product=null;
+    let product = null;
 
     for (const it of items) {
-       product = await EcomProduct.findById(it.productId).lean();
+      product = await EcomProduct.findById(it.productId).lean();
       if (!product || product.status !== "active") continue;
 
       const price =
@@ -106,13 +105,24 @@ export const placeOrder = async (req, res) => {
     const order = await Order.create({
       userId,
       items: validatedItems,
-      sellerId:product.sellerId,
+      sellerId: product.sellerId,
       subtotal,
       shippingFee,
       total,
       address,
       paymentMethod,
     });
+
+    // Track product view
+    if (userId) {
+      trackEcommerceInterest({
+        userId,
+        product: product,
+        action: "order",
+      }).catch((err) => {
+        console.error("Ecommerce interest tracking failed:", err);
+      });
+    }
 
     return res.json({
       success: true,
@@ -180,7 +190,6 @@ export const getMyOrders = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch orders" });
   }
 };
-
 
 export const getOrderDetails = async (req, res) => {
   try {

@@ -44,8 +44,8 @@ const adSchema = new mongoose.Schema(
     status: {
       type: String,
       // 📝 'out_of_budget' স্ট্যাটাসটি যুক্ত করা হয়েছে বাজেট শেষ হলে অটো অফ করার জন্য
-      enum: ["active", "paused", "expired", "out_of_budget"],
-      default: "active",
+      enum: ["active", "paused", "expired", "out_of_budget", "pending","rejected","declined"],
+      default: "pending",
     },
     gender: {
       type: [String],
@@ -54,8 +54,8 @@ const adSchema = new mongoose.Schema(
     },
     age: {
       type: String,
-      enum: ["everyone", "adult", "under_adult"],
-      default: "everyone",
+      enum: ["all", "18-24", "25-34", "35-54", "55+"],
+      default: "all",
     },
 
     // 📝 Mongoose টাইপ ডিফাইন করা হয়েছে এবং ডিফল্ট ভ্যালু ঠিক করা হয়েছে

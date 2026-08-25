@@ -388,7 +388,7 @@ export const createComment = async (req, res) => {
           // বিজ্ঞপ্তিতে কমেন্ট করলে বিজ্ঞাপনদাতার কাছে এলার্ট যাবে
           type:
             type === "ad"
-              ? "ad_comment"
+              ? "ad"
               : type === "post"
                 ? "post_comment"
                 : "group_post_comment",
