@@ -75,6 +75,11 @@ const OrderSchema = new mongoose.Schema(
       phone: String,
       address: String,
     },
+    customOrderId: { type: String, unique: true },
+    sellerOrderCount: {
+      type: Number,
+      default: 1,
+    },
 
     paymentMethod: {
       type: String,
@@ -84,12 +89,24 @@ const OrderSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["placed", "processing", "shipped", "delivered", "canceled"],
+      enum: [
+        "placed",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+        "accepted",
+      ],
       default: "placed",
+    },
+    assignedModerator: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   { timestamps: true },
 );
 
- const Order = mongoose.models.Order || mongoose.model("Order", OrderSchema);
+const Order = mongoose.models.Order || mongoose.model("Order", OrderSchema);
 export default Order;

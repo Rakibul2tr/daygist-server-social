@@ -5,12 +5,12 @@ import User from "../../models/user/user.model.js";
 export const createTicket = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { category, title, description, attachments } = req.body; // attachments = [{url, key}] (Wasabi)
+    const { category, title, description, attachments, userType } = req.body; // attachments = [{url, key}] (Wasabi)
 
-    if (!category || !title || !description) {
+    if (!title || !description || !userType) {
       return res
         .status(400)
-        .json({ success: false, message: "সবগুলো ঘর সঠিকভাবে পূরণ করুন।" });
+        .json({ success: false, message: "all fields are required" });
     }
 
     const newTicket = await Ticket.create({
@@ -19,12 +19,13 @@ export const createTicket = async (req, res) => {
       title,
       description,
       attachments: attachments || [],
+      userType,
     });
 
     return res.status(201).json({
       success: true,
       message:
-        "আপনার টিকেটটি সফলভাবে জমা হয়েছে। ২৪-৪৮ ঘণ্টার মধ্যে অ্যাডমিন টিম রিভিউ করবে।",
+        "Your ticket has been created successfully. Our support team will get back to you soon.",
       data: newTicket,
     });
   } catch (error) {

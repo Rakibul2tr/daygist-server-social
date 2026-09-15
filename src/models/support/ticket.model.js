@@ -16,7 +16,12 @@ const TicketSchema = new mongoose.Schema(
         "bug_report",
         "other",
       ],
+    },
+    userType: {
+      type: String,
+      enum: ["default", "monetization", "seller", "other"],
       required: true,
+      default: "default",
     },
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },

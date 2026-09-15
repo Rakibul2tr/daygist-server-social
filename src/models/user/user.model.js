@@ -10,7 +10,7 @@ const contactSchema = new mongoose.Schema(
     instagram: { type: String, default: null },
     linkedin: { type: String, default: null },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const addressSchema = new mongoose.Schema(
@@ -21,7 +21,7 @@ const addressSchema = new mongoose.Schema(
     country: { type: String, default: null },
     zip: { type: String, default: null },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const educationItemSchema = new mongoose.Schema(
@@ -31,7 +31,7 @@ const educationItemSchema = new mongoose.Schema(
     from: { type: String, default: null }, // "2019"
     to: { type: String, default: null }, // "2023" / "Present"
   },
-  { _id: false }
+  { _id: false },
 );
 
 const userSchema = new mongoose.Schema(
@@ -80,8 +80,18 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["USER", "ADMIN", "SELLER", "MODERATOR", "SUPPER ADMIN"],
+      enum: ["USER", "ADMIN", "SELLER", "MODERATOR", "SUPPER ADMIN", "Manager"],
       default: "USER",
+    },
+    permissions: {
+      type: [String],
+      default: [],
+    },
+
+    moderatorStatus: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
     },
 
     accountStatus: {
@@ -96,6 +106,11 @@ const userSchema = new mongoose.Schema(
       ],
       default: "pending",
       index: true,
+    },
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Seller", 
+      default: null, 
     },
 
     profileCompleted: { type: Boolean, default: false },

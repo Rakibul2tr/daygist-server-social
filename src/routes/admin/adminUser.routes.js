@@ -1,7 +1,8 @@
 // FILE: src/routes/admin/adminUser.routes.js
 import express from "express";
 import { authGuard } from "../../middleware/authMiddleware.js";
-import { isAdmin } from "../../middleware/isAdminMiddleware.js";
+import { isAdmin, isModerator } from "../../middleware/isAdminMiddleware.js";
+
 
 import {
   adminGetAllUsers,
@@ -30,7 +31,7 @@ router.patch(
   adminUpdateUserControls,
 );
 
-router.get("/overview-info", authGuard, isAdmin, adminOverview);
+router.get("/overview-info", authGuard, isAdmin,isModerator, adminOverview);
 // role based user fetching
 router.get("/users-by-role", authGuard, isAdmin, getUsersByRole);
 

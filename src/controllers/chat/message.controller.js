@@ -54,9 +54,82 @@ const ensureParticipant = async (conversationId, userId) => {
 };
 
 // get massage by pere
+// export const getMessagesByConversation = async (req, res) => {
+//   try {
+//     const me = req.user?._id;
+//     const { conversationId } = req.params;
+
+//     if (!me) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Unauthorized",
+//       });
+//     }
+
+//     if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid conversationId",
+//       });
+//     }
+
+//     const access = await ensureParticipant(conversationId, me);
+//     if (!access.ok) {
+//       return res.status(access.status).json({
+//         success: false,
+//         message: access.message,
+//       });
+//     }
+
+//     const page = Math.max(Number(req.query.page) || 1, 1);
+//     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+//     const skip = (page - 1) * limit;
+
+//     const filter = {
+//       conversationId,
+//       isDeleted: false,
+//     };
+
+//     const [messages, total] = await Promise.all([
+//       Message.find(filter)
+//         .sort({ createdAt: -1 })
+//         .skip(skip)
+//         .limit(limit)
+//         .populate("sender", "fullname name username avatar")
+//         .populate("receiver", "fullname name username avatar")
+//         .populate("replyTo.message")
+//         .populate("replyTo.sender", "name username avatar")
+//         .lean(),
+//       Message.countDocuments(filter),
+//     ]);
+
+//     // latest-first query -> frontend-friendly oldest-to-newest current page
+//     const ordered = messages.reverse();
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Messages fetched successfully",
+//       data: ordered,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         totalPages: Math.ceil(total / limit),
+//         hasMore: skip + messages.length < total,
+//       },
+//     });
+//   } catch (e) {
+//     return res.status(500).json({
+//       success: false,
+//       message: e.message || "Failed to fetch messages",
+//     });
+//   }
+// };
+
 export const getMessagesByConversation = async (req, res) => {
   try {
     const me = req.user?._id;
+    const userRole = req.user?.role;
     const { conversationId } = req.params;
 
     if (!me) {
@@ -73,13 +146,35 @@ export const getMessagesByConversation = async (req, res) => {
       });
     }
 
-    const access = await ensureParticipant(conversationId, me);
-    if (!access.ok) {
-      return res.status(access.status).json({
+    // ====================================================================
+    // 🔐 🎯 মেইন সিকিউরিটি ফিক্স: ensureParticipant এর বদলে ডাইনামিক চেক
+    // ====================================================================
+    const conversation = await Conversation.findById(conversationId).lean();
+    if (!conversation) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Conversation not found" });
+    }
+
+    const isOfficialMember = conversation.participants.some(
+      (id) => String(id) === String(me),
+    );
+
+    const isAssignedModerator =
+      userRole === "MODERATOR" &&
+      conversation.assignedAgent &&
+      String(conversation.assignedAgent) === String(me);
+
+    // বায়ার, সেলার বা অ্যাসাইনড মডারেটর কোনোটিই না হলে চ্যাটের মেসেজ দেখতে দেবে না
+    if (!isOfficialMember && !isAssignedModerator) {
+      return res.status(403).json({
         success: false,
-        message: access.message,
+        message:
+          "Forbidden: You do not have access to this conversation's messages",
       });
     }
+
+    // ====================================================================
 
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
@@ -95,8 +190,8 @@ export const getMessagesByConversation = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("sender", "fullname name username avatar")
-        .populate("receiver", "fullname name username avatar")
+        .populate("sender", "fullname name username avatar role") // মডারেটর চেনার জন্য role যুক্ত করা হলো
+        .populate("receiver", "fullname name username avatar role")
         .populate("replyTo.message")
         .populate("replyTo.sender", "name username avatar")
         .lean(),
@@ -127,9 +222,176 @@ export const getMessagesByConversation = async (req, res) => {
 };
 
 // send massage with user
+// export const sendMessage = async (req, res) => {
+//   try {
+//     const me = req.user?._id;
+
+//     const {
+//       conversationId,
+//       otherUserId,
+//       text = "",
+//       messageType = "text",
+//       media = {},
+//       mediaMeta = {},
+//       replyTo = null,
+//     } = req.body;
+
+//     if (!me) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Unauthorized",
+//       });
+//     }
+
+//     // ✅ block check
+//     const isBlocked = await Block.findOne({
+//       $or: [
+//         { blocker: me, blocked: otherUserId },
+//         { blocker: otherUserId, blocked: me },
+//       ],
+//     });
+
+//     if (isBlocked) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "You cannot send message to this user",
+//       });
+//     }
+
+//     let conversation;
+//     let receiverId;
+
+//     // ===================== CASE A =====================
+//     if (conversationId) {
+//       conversation = await Conversation.findById(conversationId);
+
+//       if (!conversation) {
+//         return res.status(404).json({
+//           success: false,
+//           message: "Conversation not found",
+//         });
+//       }
+
+//       const isMember = conversation.participants.some(
+//         (id) => String(id) === String(me),
+//       );
+
+//       if (!isMember) {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Not allowed",
+//         });
+//       }
+
+//       if (conversation.status !== "approved") {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Message request not accepted yet",
+//         });
+//       }
+
+//       receiverId = conversation.participants.find(
+//         (id) => String(id) !== String(me),
+//       );
+//     }
+
+//     // ===================== CASE B =====================
+//     if (!conversation) {
+//       if (!otherUserId) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "otherUserId required",
+//         });
+//       }
+
+//       const participants = [me, otherUserId]
+//         .map((id) => new mongoose.Types.ObjectId(id))
+//         .sort((a, b) => String(a).localeCompare(String(b)));
+
+//       conversation = await Conversation.findOne({
+//         participants: { $all: participants },
+//         $expr: { $eq: [{ $size: "$participants" }, 2] },
+//       });
+
+//       if (!conversation) {
+//         conversation = await Conversation.create({
+//           participants,
+//           status: "requested",
+//           requestedBy: me,
+//           lastMessage: "",
+//           lastMessageType: "text",
+//           lastMessageAt: new Date(),
+//           unreadCount: 0,
+//         });
+//       }
+
+//       if (conversation.status !== "approved") {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Message request pending",
+//         });
+//       }
+
+//       receiverId = otherUserId;
+//     }
+
+//     // ================= MESSAGE CREATE =================
+//     const msg = await Message.create({
+//       conversationId: conversation._id,
+//       sender: me,
+//       receiver: receiverId,
+//       text: messageType === "text" ? text : "",
+//       messageType,
+//       media,
+//       mediaMeta,
+//       seen: false,
+//       delivered: false,
+//       replyTo: replyTo
+//         ? {
+//             message: replyTo.message,
+//             text: replyTo.text,
+//             sender: replyTo.sender,
+//           }
+//         : null,
+//     });
+
+//     // ✅ update conversation
+//     conversation.lastMessage =
+//       messageType === "text"
+//         ? text
+//         : messageType === "image"
+//           ? "📷 Image"
+//           : "🎤 Voice";
+
+//     conversation.lastMessageType = messageType;
+//     conversation.lastMessageAt = new Date();
+
+//     await conversation.save();
+
+//     // ✅ populate sender receiver
+//     const populatedMsg = await Message.findById(msg._id)
+//       .populate("sender", "name username avatar")
+//       .populate("receiver", "name username avatar");
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "Message sent",
+//       data: populatedMsg,
+//     });
+//   } catch (e) {
+//     console.log("❌ sendMessage error:", e);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: e.message || "Failed to send message",
+//     });
+//   }
+// };
+
 export const sendMessage = async (req, res) => {
   try {
     const me = req.user?._id;
+    const userRole = req.user?.role;
 
     const {
       conversationId,
@@ -166,7 +428,7 @@ export const sendMessage = async (req, res) => {
     let conversation;
     let receiverId;
 
-    // ===================== CASE A =====================
+    // ===================== CASE A: conversationId দেওয়া থাকলে =====================
     if (conversationId) {
       conversation = await Conversation.findById(conversationId);
 
@@ -177,14 +439,22 @@ export const sendMessage = async (req, res) => {
         });
       }
 
-      const isMember = conversation.participants.some(
+      // 🔐 কাস্টম মেম্বার এবং মডারেটর সিকিউরিটি চেক
+      const isOfficialMember = conversation.participants.some(
         (id) => String(id) === String(me),
       );
 
-      if (!isMember) {
+      const isAssignedModerator =
+        userRole === "MODERATOR" &&
+        conversation.assignedAgent &&
+        String(conversation.assignedAgent) === String(me);
+
+      // বায়ার, সেলার বা অ্যাসাইনড মডারেটর কোনোটিই না হলে ব্লক করবে
+      if (!isOfficialMember && !isAssignedModerator) {
         return res.status(403).json({
           success: false,
-          message: "Not allowed",
+          message:
+            "Not allowed: You are not a participant or assigned agent of this chat",
         });
       }
 
@@ -195,12 +465,23 @@ export const sendMessage = async (req, res) => {
         });
       }
 
-      receiverId = conversation.participants.find(
-        (id) => String(id) !== String(me),
-      );
+      // 🎯 receiverId নির্ধারণ লজিক
+      if (userRole === "MODERATOR") {
+        // মডারেটর যদি মেসেজ পাঠায়, তবে receiver হবে কাস্টমার/বায়ার।
+        // সেলারের আইডিটি (req.user.sellerId) বাদ দিয়ে বায়ারের আইডি খুঁজে বের করা হচ্ছে।
+        const linkedSellerUserId = String(req.user.sellerId);
+        receiverId = conversation.participants.find(
+          (id) => String(id) !== linkedSellerUserId,
+        );
+      } else {
+        // বায়ার বা সেলার মেসেজ পাঠালে আপনার ওল্ড লজিক অনুযায়ী অন্যজন receiver হবে
+        receiverId = conversation.participants.find(
+          (id) => String(id) !== String(me),
+        );
+      }
     }
 
-    // ===================== CASE B =====================
+    // ===================== CASE B: conversationId না থাকলে (Direct Message) =====================
     if (!conversation) {
       if (!otherUserId) {
         return res.status(400).json({
@@ -240,11 +521,11 @@ export const sendMessage = async (req, res) => {
       receiverId = otherUserId;
     }
 
-    // ================= MESSAGE CREATE =================
+    // ================= MESSAGE CREATE (নিখুঁত ও ট্র্যাকেবল) =================
     const msg = await Message.create({
       conversationId: conversation._id,
-      sender: me,
-      receiver: receiverId,
+      sender: me, // মডারেটর পাঠালে sender হবে মডারেটরের নিজের আইডি
+      receiver: receiverId, // receiver হবে কাস্টমার বা ওনার
       text: messageType === "text" ? text : "",
       messageType,
       media,
@@ -260,7 +541,7 @@ export const sendMessage = async (req, res) => {
         : null,
     });
 
-    // ✅ update conversation
+    // ✅ update conversation preview
     conversation.lastMessage =
       messageType === "text"
         ? text
@@ -275,17 +556,16 @@ export const sendMessage = async (req, res) => {
 
     // ✅ populate sender receiver
     const populatedMsg = await Message.findById(msg._id)
-      .populate("sender", "name username avatar")
-      .populate("receiver", "name username avatar");
+      .populate("sender", "name username avatar role") // মডারেটর চেনার জন্য role পপুলেট করা হলো
+      .populate("receiver", "name username avatar role");
 
     return res.status(201).json({
       success: true,
-      message: "Message sent",
+      message: "Message sent successfully",
       data: populatedMsg,
     });
   } catch (e) {
     console.log("❌ sendMessage error:", e);
-
     return res.status(500).json({
       success: false,
       message: e.message || "Failed to send message",
@@ -345,9 +625,83 @@ export const editMessage = async (req, res) => {
 // /**
 //  * PATCH /messages/seen/:conversationId
 //  */
+// export const markMessagesSeen = async (req, res) => {
+//   try {
+//     const me = req.user?._id;
+//     const { conversationId } = req.params;
+
+//     if (!me) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Unauthorized",
+//       });
+//     }
+
+//     if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid conversationId",
+//       });
+//     }
+
+//     const access = await ensureParticipant(conversationId, me);
+//     if (!access.ok) {
+//       return res.status(access.status).json({
+//         success: false,
+//         message: access.message,
+//       });
+//     }
+
+//     const unseenMessages = await Message.find({
+//       conversationId,
+//       receiver: me,
+//       seen: false,
+//       isDeleted: false,
+//     }).select("_id");
+
+//     const unseenIds = unseenMessages.map((m) => m._id);
+
+//     if (unseenIds.length > 0) {
+//       const now = new Date();
+
+//       await Message.updateMany(
+//         { _id: { $in: unseenIds } },
+//         {
+//           $set: {
+//             seen: true,
+//             delivered: true,
+//             seenAt: now,
+//             deliveredAt: now,
+//           },
+//         },
+//       );
+//     }
+
+//     await Conversation.findByIdAndUpdate(conversationId, {
+//       $set: { unreadCount: 0 },
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Messages marked as seen",
+//       data: {
+//         conversationId,
+//         updatedCount: unseenIds.length,
+//         messageIds: unseenIds,
+//       },
+//     });
+//   } catch (e) {
+//     return res.status(500).json({
+//       success: false,
+//       message: e.message || "Failed to mark messages as seen",
+//     });
+//   }
+// };
+
 export const markMessagesSeen = async (req, res) => {
   try {
     const me = req.user?._id;
+    const userRole = req.user?.role;
     const { conversationId } = req.params;
 
     if (!me) {
@@ -364,17 +718,49 @@ export const markMessagesSeen = async (req, res) => {
       });
     }
 
-    const access = await ensureParticipant(conversationId, me);
-    if (!access.ok) {
-      return res.status(access.status).json({
+    // ====================================================================
+    // 🔐 🎯 ১. সিকিউরিটি চেক: মডারেটর বা অফিশিয়াল মেম্বার কিনা ভেরিফিকেশন
+    // ====================================================================
+    const conversation = await Conversation.findById(conversationId).lean();
+    if (!conversation) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Conversation not found" });
+    }
+
+    const isOfficialMember = conversation.participants.some(
+      (id) => String(id) === String(me),
+    );
+
+    const isAssignedModerator =
+      userRole === "MODERATOR" &&
+      conversation.assignedAgent &&
+      String(conversation.assignedAgent) === String(me);
+
+    if (!isOfficialMember && !isAssignedModerator) {
+      return res.status(403).json({
         success: false,
-        message: access.message,
+        message:
+          "Forbidden: You cannot mark messages as seen for this conversation",
       });
     }
 
+    // ====================================================================
+    // 📩 🎯 ২. ডাইনামিক রিসিভার আইডি সেটআপ (মডারেটর ফিক্স)
+    // ====================================================================
+    let targetReceiverId = me;
+
+    if (userRole === "MODERATOR") {
+      // বায়ার যখন মেসেজ পাঠায়, সে সেলারকে receiver বানিয়ে পাঠায়।
+      // তাই মডারেটর চ্যাটে ঢুকলে যেন বায়ারের পাঠানো মেসেজগুলো 'Seen' হয়ে যায়,
+      // তার জন্য receiver হিসেবে সেলারের (মালিকের) ইউজার আইডি দিয়ে মেসেজ খুঁজতে হবে।
+      targetReceiverId = new mongoose.Types.ObjectId(String(req.user.sellerId));
+    }
+
+    // বিপরীত পার্টির পাঠানো আনসিন মেসেজগুলো খুঁজে বের করা
     const unseenMessages = await Message.find({
       conversationId,
-      receiver: me,
+      receiver: targetReceiverId, // 🎯 ওনার আইডিতে সিঙ্ক করা হলো
       seen: false,
       isDeleted: false,
     }).select("_id");
@@ -397,13 +783,14 @@ export const markMessagesSeen = async (req, res) => {
       );
     }
 
+    // গ্লোবাল আনরিড কাউন্ট ক্লিয়ার করা
     await Conversation.findByIdAndUpdate(conversationId, {
       $set: { unreadCount: 0 },
     });
 
     return res.status(200).json({
       success: true,
-      message: "Messages marked as seen",
+      message: "Messages marked as seen successfully",
       data: {
         conversationId,
         updatedCount: unseenIds.length,
@@ -613,6 +1000,9 @@ export const getChatOnlineUnion = async (req, res) => {
     });
   }
 };
+
+
+
 // export const getChatOnlineUnion = async (req, res) => {
 //   try {
 //     const userId = req.user?._id;
@@ -798,6 +1188,8 @@ export const getChatOnlineUnion = async (req, res) => {
 // };
 
 // ===================== Message Reaction =====================
+
+
 export const handleMessageReaction = async (req, res) => {
   try {
     const { emoji } = req.body;

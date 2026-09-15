@@ -2,6 +2,7 @@ import express from "express";
 import {
   acceptConversationRequest,
   checkConversationExists,
+  createOrGetAdminSupportConversation,
   createOrGetConversation,
   getConversationById,
   getMyConversations,
@@ -56,5 +57,8 @@ router.patch("/message/:messageId", authGuard, editMessage);
  * Optional
  */
 router.delete("/message/:messageId", authGuard, deleteMessage);
+
+
+router.post("/conversations/support/create-or-get", authGuard, createOrGetAdminSupportConversation);
 
 export default router;

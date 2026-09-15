@@ -47,6 +47,7 @@ const SellerSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    totalOrders: { type: Number, default: 0 },
 
     isDeleted: { type: Boolean, default: false },
   },

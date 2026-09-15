@@ -13,16 +13,18 @@ export const authGuard = async (req, res, next) => {
     const user = await User.findById(decoded.userId);
 
     if (!user) return res.status(401).json({ message: "Unauthorized" });
-     if (user.accountStatus === "deleted") {
-       return res.status(403).json({ message: "Account deleted" });
-     }
+    if (user.accountStatus === "deleted") {
+      return res.status(403).json({ message: "Account deleted" });
+    }
 
-     if (user.accountStatus === "suspended") {
-       return res.status(403).json({ message: "Account suspended" });
-     }
+    if (user.accountStatus === "suspended") {
+      return res.status(403).json({ message: "Account suspended" });
+    }
 
     req.user = user;
+
     next();
+    // console.log("✅ [Auth Success]: User authenticated", user._id);
   } catch (e) {
     return res.status(401).json({ message: "Unauthorized" });
   }

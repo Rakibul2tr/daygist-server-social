@@ -6,6 +6,7 @@ import { uploadBufferToCloudinary } from "../../services/cloudinary.service.js";
 
 export const uploadImage = async (req, res) => {
   try {
+    
     if (!req.file) {
       return res.status(400).json({ ok: false, message: "file missing" });
     }
@@ -16,6 +17,9 @@ export const uploadImage = async (req, res) => {
       originalname: req.file.originalname,
       folder: "images",
     });
+
+    // console.log('upload image to wasabi',result);
+    
 
     // ✅ provider attach
     return res.json({ ok: true, provider: "wasabi", ...result });

@@ -31,6 +31,7 @@ import sellerRoutes from "./routes/ecommerce/seller.routes.js";
 import boostPricingRoutes from "./routes/ecommerce/boostPricing.routes.js";
 import payFeeRoutes from "./routes/ecommerce/payFee.routes.js";
 import orderRoutes from "./routes/ecommerce/order.routes.js";
+import sellerModeratorRoutes from "./routes/ecommerce/sellerModerator.routes.js";
 
 
 
@@ -49,6 +50,7 @@ import AdminWalletSettings from "./routes/admin/walletSettings.routes.js"
 import adminGeneralVideoRoutes from "./routes/admin/adminGeneralVideo.routes.js";
 import settingRoutes from "./routes/admin/adminSetting.routes.js";
 import adminAdsCpcRoutes from "./routes/admin/countryCpc.routes.js";
+import AdminModeratorRoutes from "./routes/admin/adminModeratorRoutes.js";
 
 
 
@@ -92,6 +94,7 @@ app.use("/e-commerce", ecommerceRoutes);
 app.use("/e-commerce", sellerRoutes);
 app.use("/e-commerce", payFeeRoutes);
 app.use("/e-commerce", orderRoutes);
+app.use("/e-commerce", sellerModeratorRoutes);
 
 
 // boost pricing admin and user both
@@ -121,6 +124,7 @@ app.use("/admin",adminAdsRoutes)
 app.use("/admin",adminAdsCpcRoutes)
 //admin wallet-settings
 app.use("/admin",AdminWalletSettings)
+app.use("/admin-moderator",AdminModeratorRoutes)
 
 
 

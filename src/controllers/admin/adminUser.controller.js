@@ -1,4 +1,5 @@
 // FILE: src/controllers/admin/adminUser.controller.js
+import mongoose from "mongoose";
 import User from "../../models/user/user.model.js"; // ✅ path তোমার project অনুযায়ী ঠিক করো
 import { verifyGoogleToken } from "../../utils/googleVerify.js";
 import { generateToken } from "../../utils/jwt.js";
@@ -12,6 +13,7 @@ const generateUsername = (email) => {
 };
 
 // login or signup
+// login or signup for both Admin and Moderator
 export const googleAdminLoginOrCreate = async (req, res) => {
   try {
     const idToken = req.body?.idToken || req.body?.token;
@@ -27,47 +29,69 @@ export const googleAdminLoginOrCreate = async (req, res) => {
       return res.status(401).json({ message: "Invalid Google token payload" });
     }
 
-    // ✅ only these emails can create/login as admin
+    // ✅ শুধুমাত্র এই ইমেইলগুলো নতুন অ্যাডমিন হিসেবে সাইন-আপ/লগইন করতে পারবে
     const allowedAdminEmails = [
       "rakibul2tr@gmail.com",
       "owner@gmail.com",
-      "dmdhelal@gmail.com",
       "beyondtraces.official@gmail.com",
       "stillbux@gmail.com",
     ];
 
-    if (!allowedAdminEmails.includes(email)) {
-      return res.status(403).json({
-        success: false,
-        message: "This Google account is not useable",
-      });
-    }
-
+    // ডাটাবেজে অলরেডি এই ইমেইলের কোনো ইউজার (Admin বা Moderator) আছে কিনা চেক করুন
     let user = await User.findOne({ email });
 
+    // ১. ইউজার যদি ডাটাবেজে না থাকে (নতুন ইউজার)
     if (!user) {
+      // সে যদি এলাউড অ্যাডমিন লিস্টে না থাকে, তবে তাকে মডারেটর বা অ্যাডমিন কোনোভাবেই ঢুকতে দেওয়া হবে না
+      if (!allowedAdminEmails.includes(email)) {
+        return res.status(403).json({
+          success: false,
+          message: "This Google account is not usable",
+        });
+      }
+
+      // লিস্টে থাকলে নতুন ADMIN হিসেবে অ্যাকাউন্ট তৈরি হবে
       user = await User.create({
         googleId: sub,
         email,
-        name: name || "Admin",
+        name: name,
         avatar: {
           url: picture || null,
           key: null,
           provider: "google",
         },
         username: generateUsername(email),
-        role: "ADMIN", // or "SUPPER ADMIN"
+        role: "ADMIN",
         profileCompleted: true,
         isNewUser: false,
         accountStatus: "active",
       });
-    } else {
-      // ✅ if already exists, update googleId if empty
+    } 
+    // ২. ইউজার যদি ডাটাবেজে অলরেডি থাকে (অ্যাডমিন আগে ক্রিয়েট করেছে অথবা পুরাতন অ্যাডমিন)
+    else {
+      // যদি লগইন করা ইউজারটি MODERATOR হয়
+      if (user.role === "MODERATOR") {
+        // মডারেটর অ্যাকাউন্টটি ইনঅ্যাক্টিভ করা থাকলে লগইন ব্লক করুন
+        if (user.moderatorStatus === "inactive") {
+          return res.status(403).json({
+            success: false,
+            message: "Your Moderator account is inactive. Contact Admin.",
+          });
+        }
+      } 
+      // যদি লগইন করা ইউজার মডারেটর না হয়, এবং তার ইমেইল এলাউড লিস্টেও না থাকে (সেফটি চেক)
+      else if (!allowedAdminEmails.includes(email) && user.role !== "SUPPER ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You do not have permission to log in.",
+        });
+      }
+
+      // গুগলের তথ্য দিয়ে প্রোফাইল সিঙ্ক/আপডেট করা
       if (!user.googleId) {
         user.googleId = sub;
       }
 
-      // optional sync
       if (!user.name && name) {
         user.name = name;
       }
@@ -80,28 +104,32 @@ export const googleAdminLoginOrCreate = async (req, res) => {
         };
       }
 
-      // ✅ force role as ADMIN if needed
-      user.role = "ADMIN";
+      // ⚠️ আগে এখানে সবার রোল জোর করে 'ADMIN' করে দেওয়া হতো। 
+      // এখন ইউজার মডারেটর হলে তার রোল মডারেটরি থাকবে, পরিবর্তন হবে না।
+      if (user.role !== "MODERATOR") {
+        user.role = "ADMIN"; // মডারেটর না হলে এবং ওপরে ফিল্টার পাস করলে সে অ্যাডমিন
+      }
+      
       user.accountStatus = "active";
-
-     const res= await user.save();
-     
+      await user.save();
     }
 
+    // টোকেন জেনারেট করা (ইউজারের নিজস্ব রোল অনুযায়ী - ADMIN বা MODERATOR)
     const token = generateToken({
       userId: user._id,
       role: user.role,
       profileCompleted: user.profileCompleted,
     });
-    console.log('admin user',user);
-    
+
+    console.log('Logged in user info:', user);
 
     return res.status(200).json({
       success: true,
-      message: "Admin login successful",
+      message: `${user.role === "MODERATOR" ? "Moderator" : "Admin"} login successful`,
       token,
       user,
     });
+
   } catch (error) {
     console.log("googleAdminLoginOrCreate error:", error?.message || error);
 
@@ -112,6 +140,7 @@ export const googleAdminLoginOrCreate = async (req, res) => {
     });
   }
 };
+
 // get all users
 export const adminGetAllUsers = async (req, res) => {
   try {
@@ -203,24 +232,34 @@ export const adminGetUserById = async (req, res) => {
 // all status update in 1 api
 export const adminUpdateUserControls = async (req, res) => {
   try {
+    
+    
     const id = req.params?.id;
-    const { role, isBlocked, isDeleted, forceLogout, accountStatus } =
-      req.body || {};
+    const {
+      role,
+      isBlocked,
+      isDeleted,
+      forceLogout,
+      accountStatus,
+      moderatorStatus,
+    } = req.body || {};
+      
+   if (!mongoose.Types.ObjectId.isValid(id)) {
+     return res.status(400).json({
+       ok: false,
+       message: "Invalid user id",
+     });
+   }
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        ok: false,
-        message: "Invalid user id",
-      });
-    }
 
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({
-        ok: false,
-        message: "User not found",
-      });
-    }
+   const user = await User.findById(id);
+   if (!user) {
+     return res.status(404).json({
+       ok: false,
+       message: "User not found",
+     });
+   }
+
 
     // optional self protection
     if (String(req.user?._id) === String(id)) {
@@ -249,6 +288,8 @@ export const adminUpdateUserControls = async (req, res) => {
     // role update
     if (typeof role !== "undefined") {
       const normalizedRole = String(role).trim().toUpperCase();
+      // console.log("normalizedRole", normalizedRole);
+      
 
       if (!ALLOWED_ROLES.includes(normalizedRole)) {
         return res.status(400).json({
@@ -259,6 +300,19 @@ export const adminUpdateUserControls = async (req, res) => {
 
       user.role = normalizedRole;
     }
+      if (typeof moderatorStatus !== "undefined") {
+        const normalizedStatus = String(moderatorStatus).trim().toLowerCase();
+
+        // স্কিমা অনুযায়ী শুধুমাত্র active অথবা inactive এলাউড
+        if (!["active", "inactive"].includes(normalizedStatus)) {
+          return res.status(400).json({
+            ok: false,
+            message: "Invalid moderator status value",
+          });
+        }
+
+        user.moderatorStatus = normalizedStatus;
+      }
 
     // block/unblock
     if (typeof isBlocked === "boolean") {
@@ -309,9 +363,11 @@ export const adminUpdateUserControls = async (req, res) => {
       data: updatedUser,
     });
   } catch (e) {
+    console.log("adminUpdateUserControls error:", e?.message || e)
     return res.status(500).json({
       ok: false,
       message: e?.message || "Update failed",
+      
     });
   }
 }; 

@@ -1,3 +1,5 @@
+
+import mongoose from "mongoose";
 import EcomProduct from "../../models/ecommarce/EcomProduct.js";
 import Order from "../../models/ecommarce/Order.model.js";
 import Seller from "../../models/ecommarce/Seller.model.js";
@@ -119,19 +121,131 @@ export const requestSeller = async (req, res) => {
 };
 
 // ✅ Seller can see own seller profile/status
+// export const getMySellerInfo = async (req, res) => {
+//   try {
+//     const userId = req.user?._id;
+//     if (!userId) {
+//       return res.status(401).json({ success: false, message: "Unauthorized" });
+//     }
+
+//     // ✅ seller doc
+//     const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
+
+//     console.log("🔍 [Debug]: Seller doc for userId", userId, "is:", seller);
+
+//     // seller না থাকলে stats null/0 দিয়ে return
+//     if (!seller) {
+//       const wallet = await Wallet.findOne({ userId })
+//         .select("available")
+//         .lean();
+//       return res.json({
+//         success: true,
+//         data: null,
+//         status: {
+//           productCount: 0,
+//           completedOrdersCount: 0,
+//           pendingOrdersCount: 0,
+//           walletBalance: Number(wallet?.available || 0),
+//         },
+//       });
+//     }
+
+//     // ✅ IMPORTANT:
+//     // - product এ যদি sellerId ফিল্ড থাকে -> sellerId ব্যবহার করো
+//     // - order এ sellerId বা shopId যেটা আছে সেটাই ব্যবহার করো
+
+//     const sellerId = seller.userId;
+
+//     // তোমার order status naming অনুযায়ী এগুলো adjust করো
+//     const COMPLETED = ["delivered", "completed"];
+//     const PENDING = ["pending", "placed", "processing"];
+
+//     const [productCount, completedOrdersCount, pendingOrdersCount, wallet] =
+//       await Promise.all([
+//         EcomProduct.countDocuments({
+//           sellerId: sellerId, // ✅ product.sellerId
+//           isDeleted: false,
+//         }),
+
+//         Order.countDocuments({
+//           sellerId: sellerId, // ✅ order.sellerId (না থাকলে change করো)
+//           status: { $in: COMPLETED },
+//         }),
+
+//         Order.countDocuments({
+//           sellerId: sellerId,
+//           status: { $in: PENDING },
+//         }),
+
+//         Wallet.findOne({ userId }).select("available").lean(),
+//       ]);
+
+//     // console.log("wallet", wallet);
+
+//     return res.json({
+//       success: true,
+//       data: seller,
+//       status: {
+//         productCount,
+//         completedOrdersCount,
+//         pendingOrdersCount,
+//         walletBalance: Number(wallet?.available || 0),
+//       },
+//     });
+//   } catch (e) {
+//     return res.status(500).json({ success: false, message: e.message });
+//   }
+// };
 export const getMySellerInfo = async (req, res) => {
   try {
     const userId = req.user?._id;
+    const userRole = req.user?.role;
+
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    // ✅ seller doc
-    const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
+    let actualSellerUserId = null;
 
-    // seller না থাকলে stats null/0 দিয়ে return
+    // ====================================================================
+    // 🔐 ১. সেলার বনাম মডারেটর অনুযায়ী শপের মালিকের ইউজার আইডি নির্ধারণ
+    // ====================================================================
+    if (userRole === "SELLER") {
+      actualSellerUserId = userId;
+    } else if (userRole === "MODERATOR") {
+      if (req.user.moderatorStatus === "inactive" || !req.user.sellerId) {
+        return res
+          .status(403)
+          .json({
+            success: false,
+            message: "Inactive or unlinked moderator account.",
+          });
+      }
+
+      // মডারেটরের 'sellerId' (যা সেলারের userId) সরাসরি ব্যবহার করা হলো
+      actualSellerUserId = new mongoose.Types.ObjectId(
+        String(req.user.sellerId),
+      );
+    } else {
+      return res
+        .status(403)
+        .json({ success: false, message: "Access denied." });
+    }
+
+    // ✅ ২. প্রকৃত সেলারের আইডি দিয়ে শপ ডকুমেন্ট খুঁজে বের করা
+    const seller = await Seller.findOne({
+      userId: actualSellerUserId,
+      isDeleted: false,
+    }).lean();
+
+    console.log(
+      `🔍 [Debug Info Fetch]: Requested by ${userRole} | Target Seller UserID:`,
+      actualSellerUserId,
+    );
+
+    // সেলার বা শপ প্রোফাইল না থাকলে ডিফল্ট ০ রিটার্ন
     if (!seller) {
-      const wallet = await Wallet.findOne({ userId })
+      const wallet = await Wallet.findOne({ userId: actualSellerUserId })
         .select("available")
         .lean();
       return res.json({
@@ -146,25 +260,20 @@ export const getMySellerInfo = async (req, res) => {
       });
     }
 
-    // ✅ IMPORTANT:
-    // - product এ যদি sellerId ফিল্ড থাকে -> sellerId ব্যবহার করো
-    // - order এ sellerId বা shopId যেটা আছে সেটাই ব্যবহার করো
-
-    const sellerId = seller.userId;
-
-    // তোমার order status naming অনুযায়ী এগুলো adjust করো
+    const sellerId = seller.userId; // শপের ওনারের ইউজার আইডি
     const COMPLETED = ["delivered", "completed"];
     const PENDING = ["pending", "placed", "processing"];
 
+    // ✅ ৩. ডাটা কাউন্ট ও ওয়ালেট ব্যালেন্স কোয়েরি (প্রকৃত মালিকের আইডি দিয়ে)
     const [productCount, completedOrdersCount, pendingOrdersCount, wallet] =
       await Promise.all([
         EcomProduct.countDocuments({
-          sellerId: sellerId, // ✅ product.sellerId
+          sellerId: sellerId,
           isDeleted: false,
         }),
 
         Order.countDocuments({
-          sellerId: sellerId, // ✅ order.sellerId (না থাকলে change করো)
+          sellerId: sellerId,
           status: { $in: COMPLETED },
         }),
 
@@ -173,25 +282,26 @@ export const getMySellerInfo = async (req, res) => {
           status: { $in: PENDING },
         }),
 
-        Wallet.findOne({ userId }).select("available").lean(),
+        // ওয়ালেট ব্যালেন্স মেইন সেলারের আইডি থেকে আসবে
+        Wallet.findOne({ userId: sellerId }).select("available").lean(),
       ]);
-
-    // console.log("wallet", wallet);
 
     return res.json({
       success: true,
-      data: seller,
+      data: seller, // শপের প্রোফাইল ইনফো (লোগো, নাম ইত্যাদি)
       status: {
         productCount,
         completedOrdersCount,
         pendingOrdersCount,
-        walletBalance: Number(wallet?.available || 0),
+        walletBalance: Number(wallet?.available || 0), // ওনারের মেইন ওয়ালেট ব্যালেন্স
       },
     });
   } catch (e) {
+    console.error("getMySellerInfo error", e);
     return res.status(500).json({ success: false, message: e.message });
   }
 };
+
 
 // ✅ Admin: list requests
 export const adminGetSellerRequests = async (req, res) => {
@@ -294,30 +404,158 @@ export const adminDeleteSeller = async (req, res) => {
 
 // seller product get
 
+// export const getMySellerOrders = async (req, res) => {
+//   try {
+//     const userId = req.user?._id;
+//     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+//     const { status, page = 1, limit = 20 } = req.query;
+
+//     // ✅ seller find
+//     const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
+//     // console.log('seller',seller);
+    
+//     if (!seller) {
+//       return res.json({
+//         page: Number(page),
+//         limit: Number(limit),
+//         total: 0,
+//         hasMore: false,
+//         orders: [],
+//       });
+//     }
+
+//     const sellerId = seller.userId; // তোমার code অনুযায়ী sellerId = seller.userId
+
+//     const filter = { sellerId }; // ✅ Order.sellerId must exist
+//     if (status) filter.status = String(status);
+
+//     const skip = (Number(page) - 1) * Number(limit);
+
+//     const [orders, total] = await Promise.all([
+//       Order.find(filter)
+//         .sort({ createdAt: -1 })
+//         .skip(skip)
+//         .limit(Number(limit))
+//         .populate({
+//           path: "userId",
+//           select: "name username profilePic regNumber",
+//         }) // buyer info
+//         .populate({
+//           path: "items.productId",
+//           select: "title thumbnail price finalPrice discountPercent",
+//         })
+//         .lean(),
+//       Order.countDocuments(filter),
+//     ]);
+
+//     console.log('orders',orders);
+    
+
+//     // ✅ normalize populated product snapshot like your user API
+//     const enriched = orders.map((o) => ({
+//       ...o,
+//       items: (o.items || []).map((it) => {
+//         const p = it.productId;
+//         return {
+//           ...it,
+//           product: p
+//             ? {
+//                 _id: p._id,
+//                 title: p.title,
+//                 thumbnail: p.thumbnail,
+//                 finalPrice: p.finalPrice,
+//                 price: p.price,
+//                 discountPercent: p.discountPercent,
+//               }
+//             : null,
+//           productId: p?._id || it.productId,
+//         };
+//       }),
+//     }));
+
+//     return res.json({
+//       page: Number(page),
+//       limit: Number(limit),
+//       total,
+//       hasMore: skip + enriched.length < total,
+//       orders: enriched,
+//     });
+//   } catch (err) {
+//     console.error("getMySellerOrders error", err);
+//     return res.status(500).json({ message: "Failed to fetch seller orders" });
+//   }
+// };
+
 export const getMySellerOrders = async (req, res) => {
   try {
     const userId = req.user?._id;
+    const userRole = req.user?.role;
+
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
     const { status, page = 1, limit = 20 } = req.query;
 
-    // ✅ seller find
-    const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
-    // console.log('seller',seller);
-    
-    if (!seller) {
-      return res.json({
-        page: Number(page),
-        limit: Number(limit),
-        total: 0,
-        hasMore: false,
-        orders: [],
-      });
+    let targetSellerUserId = null;
+    let isModeratorMode = false;
+
+    if (userRole === "SELLER") {
+      const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
+      if (!seller) {
+        return res.json({
+          page: Number(page),
+          limit: Number(limit),
+          total: 0,
+          hasMore: false,
+          orders: [],
+        });
+      }
+      targetSellerUserId = seller.userId;
+    } else if (userRole === "MODERATOR") {
+      if (req.user.moderatorStatus === "inactive" || !req.user.sellerId) {
+        return res
+          .status(403)
+          .json({
+            message: "Access denied. Inactive or unlinked moderator account.",
+          });
+      }
+
+      // 🎯 মেইন ফিক্স: findById এর বদলে findOne({ userId }) ব্যবহার করা হলো
+      console.log(
+        "🔍 [Debug]: Moderator req.user.sellerId is:",
+        req.user.sellerId,
+      );
+      const linkedShop = await Seller.findOne({
+        userId: req.user.sellerId,
+        isDeleted: false,
+      }).lean();
+
+     
+
+      if (!linkedShop) {
+        return res
+          .status(404)
+          .json({
+            message: "Linked shop profile not found for this moderator.",
+          });
+      }
+
+      targetSellerUserId = linkedShop.userId;
+      isModeratorMode = true;
+    } else {
+      return res
+        .status(403)
+        .json({ message: "Access denied: Sellers or Shop Staff only." });
     }
 
-    const sellerId = seller.userId; // তোমার code অনুযায়ী sellerId = seller.userId
+    // ফিল্টার অবজেক্ট
+    const filter = { sellerId: targetSellerUserId };
+    
 
-    const filter = { sellerId }; // ✅ Order.sellerId must exist
+    if (isModeratorMode) {
+      filter.assignedModerator = userId; // শুধু মডারেটরের নিজের অর্ডার আসবে
+    }
+
     if (status) filter.status = String(status);
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -330,7 +568,7 @@ export const getMySellerOrders = async (req, res) => {
         .populate({
           path: "userId",
           select: "name username profilePic regNumber",
-        }) // buyer info
+        })
         .populate({
           path: "items.productId",
           select: "title thumbnail price finalPrice discountPercent",
@@ -339,10 +577,6 @@ export const getMySellerOrders = async (req, res) => {
       Order.countDocuments(filter),
     ]);
 
-    console.log('orders',orders);
-    
-
-    // ✅ normalize populated product snapshot like your user API
     const enriched = orders.map((o) => ({
       ...o,
       items: (o.items || []).map((it) => {
@@ -376,6 +610,8 @@ export const getMySellerOrders = async (req, res) => {
     return res.status(500).json({ message: "Failed to fetch seller orders" });
   }
 };
+
+
 
 export const getMySellerOrderDetails = async (req, res) => {
   try {
@@ -411,20 +647,185 @@ export const getMySellerOrderDetails = async (req, res) => {
 };
 
 // seller update order status
+
+// export const updateMySellerOrderStatus = async (req, res) => {
+//   try {
+//     const userId = req.user?._id;
+//     const userRole = req.user?.role;
+
+//     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+//     let targetSellerUserId = null;
+//     let isModeratorMode = false;
+
+//     // ====================================================================
+//     // 🔐 ১. সেলার বনাম মডারেটর অনুযায়ী শপের ওনারের ইউজার আইডি নির্ধারণ
+//     // ====================================================================
+//     if (userRole === "SELLER") {
+//       const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
+//       if (!seller) return res.status(404).json({ message: "Seller not found" });
+//       targetSellerUserId = seller.userId;
+//     } else if (userRole === "MODERATOR") {
+//       if (req.user.moderatorStatus === "inactive" || !req.user.sellerId) {
+//         return res
+//           .status(403)
+//           .json({
+//             message: "Access denied. Inactive or unlinked moderator account.",
+//           });
+//       }
+
+//       // মডারেটরের 'sellerId' (যা সেলারের userId) ব্যবহার করে শপ প্রোফাইল খোঁজা
+//       const linkedShop = await Seller.findOne({
+//         userId: req.user.sellerId,
+//         isDeleted: false,
+//       }).lean();
+//       if (!linkedShop) {
+//         return res
+//           .status(404)
+//           .json({
+//             message: "Linked shop profile not found for this moderator.",
+//           });
+//       }
+
+//       targetSellerUserId = linkedShop.userId;
+//       isModeratorMode = true;
+//     } else {
+//       return res.status(403).json({ message: "Access denied." });
+//     }
+
+//     const orderId = req.params.id;
+//     const nextStatus = String(req.body?.status || "").trim();
+
+//     console.log(
+//       `📡 [Status Update]: Action by ${userRole} | Shop Owner ID: ${targetSellerUserId} | Next Status: ${nextStatus}`,
+//     );
+
+//     // allowed statuses
+//     const ALLOWED = [
+//       "placed",
+//       "processing",
+//       "shipped",
+//       "delivered",
+//       "cancelled",
+//     ];
+//     if (!ALLOWED.includes(nextStatus)) {
+//       return res.status(400).json({ message: "Invalid status" });
+//     }
+
+//     // ====================================================================
+//     // 🔍 ২. ডাইনামিক ফিল্টার দিয়ে ডাটাবেজ থেকে অর্ডার খুঁজে বের করা
+//     // ====================================================================
+//     const orderFilter = { _id: orderId, sellerId: targetSellerUserId };
+
+//     // 🎯 মেইন সিকিউরিটি ফিক্স: মডারেটর হলে সে শুধুমাত্র তার নিজের অ্যাসাইন করা অর্ডারের স্ট্যাটাস চেঞ্জ করতে পারবে
+//     if (isModeratorMode) {
+//       orderFilter.assignedModerator = userId;
+//     }
+
+//     const order = await Order.findOne(orderFilter);
+//     if (!order)
+//       return res
+//         .status(404)
+//         .json({
+//           message: "Order not found or you are not assigned to this order",
+//         });
+
+//     if (order.status === "delivered") {
+//       return res
+//         .status(400)
+//         .json({ message: "Delivered order cannot be changed" });
+//     }
+
+//     // status backwards check
+//     const rank = {
+//       placed: 1,
+//       processing: 2,
+//       shipped: 3,
+//       delivered: 4,
+//       cancelled: 99,
+//     };
+
+//     if (order.status !== "cancelled" && nextStatus !== "cancelled") {
+//       const prevR = rank[order.status] || 0;
+//       const nextR = rank[nextStatus] || 0;
+//       if (nextR < prevR) {
+//         return res
+//           .status(400)
+//           .json({ message: "Cannot move status backwards" });
+//       }
+//     }
+
+//     // ৩. স্ট্যাটাস এবং ট্র্যাকিং টাইমস্ট্যাম্প আপডেট
+//     order.status = nextStatus;
+//     order.updatedAt = new Date();
+
+//     if (nextStatus === "shipped")
+//       order.shippedAt = order.shippedAt || new Date();
+//     if (nextStatus === "delivered")
+//       order.deliveredAt = order.deliveredAt || new Date();
+//     if (nextStatus === "cancelled")
+//       order.cancelledAt = order.cancelledAt || new Date();
+
+//     await order.save();
+
+//     return res.json({ success: true, orderId, status: nextStatus });
+//   } catch (err) {
+//     console.error("updateMySellerOrderStatus error", err);
+//     return res.status(500).json({ message: "Failed to update status" });
+//   }
+// };
+
+
 export const updateMySellerOrderStatus = async (req, res) => {
   try {
     const userId = req.user?._id;
+    const userRole = req.user?.role;
+
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
-    if (!seller) return res.status(404).json({ message: "Seller not found" });
+    let targetSellerUserId = null;
+    let isModeratorMode = false;
 
-    const sellerId = seller.userId;
+    // ====================================================================
+    // 🔐 ১. সেলার বনাম মডারেটর অনুযায়ী শপের ওনারের ইউজার আইডি নির্ধারণ
+    // ====================================================================
+    if (userRole === "SELLER") {
+      const seller = await Seller.findOne({ userId, isDeleted: false }).lean();
+      if (!seller) return res.status(404).json({ message: "Seller not found" });
+      targetSellerUserId = seller.userId;
+    } else if (userRole === "MODERATOR") {
+      if (req.user.moderatorStatus === "inactive" || !req.user.sellerId) {
+        return res.status(403).json({
+          message: "Access denied. Inactive or unlinked moderator account.",
+        });
+      }
+
+      const linkedShop = await Seller.findOne({
+        userId: req.user.sellerId,
+        isDeleted: false,
+      }).lean();
+      if (!linkedShop) {
+        return res.status(404).json({
+          message: "Linked shop profile not found for this moderator.",
+        });
+      }
+
+      targetSellerUserId = linkedShop.userId;
+      isModeratorMode = true;
+    } else {
+      return res.status(403).json({ message: "Access denied." });
+    }
+
     const orderId = req.params.id;
+    const nextStatus = String(req.body?.status || "")
+      .trim()
+      .toLowerCase(); // 🎯 সেফটি লোয়ারকেস
 
-    const nextStatus = String(req.body?.status || "").trim();
+    console.log(
+      `📡 [Status Update]: Action by ${userRole} | Shop Owner ID: ${targetSellerUserId} | Next Status: ${nextStatus}`,
+    );
 
-    // ✅ তোমার system এর allowed statuses অনুযায়ী adjust করো
+    // allowed statuses (আপনার স্পেলিং অনুযায়ী 'cancelled' রাখা হলো)
     const ALLOWED = [
       "placed",
       "processing",
@@ -436,27 +837,49 @@ export const updateMySellerOrderStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    // ✅ optional: disallow backwards status
-    // placed -> processing -> shipped -> delivered
-    const rank = {
-      placed: 1,
-      processing: 2,
-      shipped: 3,
-      delivered: 4,
-      cancelled: 99,
-    };
-    const order = await Order.findOne({ _id: orderId, sellerId });
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    // ====================================================================
+    // 🔍 ২. ডাইনামিক ফিল্টার দিয়ে ডাটাবেজ থেকে অর্ডার খুঁজে বের করা
+    // ====================================================================
+    const orderFilter = { _id: orderId, sellerId: targetSellerUserId };
 
+    if (isModeratorMode) {
+      orderFilter.assignedModerator = userId;
+    }
+
+    const order = await Order.findOne(orderFilter);
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found or you are not assigned to this order",
+      });
+    }
+
+    // 🛑 মেইন রুল ১: একবার ডেলিভারড বা ক্যানসেলড হয়ে গেলে আর কোনো স্ট্যাটাস চেঞ্জ হবে না
     if (order.status === "delivered") {
       return res
         .status(400)
         .json({ message: "Delivered order cannot be changed" });
     }
+    if (order.status === "cancelled") {
+      return res
+        .status(400)
+        .json({ message: "Already cancelled order cannot be changed" });
+    }
 
-    if (order.status !== "cancelled" && nextStatus !== "cancelled") {
+    // ====================================================================
+    // 🛑 ৩. স্ট্যাটাস ব্যাকওয়ার্ড ও ক্যানসেলেশন রুলস
+    // ====================================================================
+    const rank = {
+      placed: 1,
+      processing: 2,
+      shipped: 3,
+      delivered: 4,
+    };
+
+    // 🎯 মেইন ফিক্স: পরবর্তী স্ট্যাটাস 'cancelled' হলে পিছনের চেকিং স্কিপ করবে (যেকোনো সময় ক্যানসেল করা যাবে)
+    if (nextStatus !== "cancelled") {
       const prevR = rank[order.status] || 0;
       const nextR = rank[nextStatus] || 0;
+
       if (nextR < prevR) {
         return res
           .status(400)
@@ -464,16 +887,16 @@ export const updateMySellerOrderStatus = async (req, res) => {
       }
     }
 
+    // ৪. স্ট্যাটাস এবং ট্র্যাকিং টাইমস্ট্যাম্প আপডেট
     order.status = nextStatus;
     order.updatedAt = new Date();
 
-    // ✅ optional tracking fields থাকলে set করো
-    if (nextStatus === "shipped") {
+    if (nextStatus === "shipped")
       order.shippedAt = order.shippedAt || new Date();
-    }
-    if (nextStatus === "delivered") {
+    if (nextStatus === "delivered")
       order.deliveredAt = order.deliveredAt || new Date();
-    }
+
+    // আপনার ওল্ড ডাটাবেজ ফিল্ড অনুযায়ী কন্ডিশন সিঙ্ক করা হলো
     if (nextStatus === "cancelled") {
       order.cancelledAt = order.cancelledAt || new Date();
     }

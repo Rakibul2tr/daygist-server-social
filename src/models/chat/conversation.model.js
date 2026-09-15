@@ -18,7 +18,7 @@ const conversationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["general", "market"],
+      enum: ["general", "market", "support"],
       default: "general",
     },
     status: {
@@ -41,6 +41,11 @@ const conversationSchema = new mongoose.Schema(
     lastMessageAt: {
       type: Date,
       default: Date.now,
+    },
+    assignedAgent: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", // অ্যাডমিন বা মডারেটরের আইডি সেভ হবে
+      default: null,
     },
 
     // optional: total unread count for whole conversation

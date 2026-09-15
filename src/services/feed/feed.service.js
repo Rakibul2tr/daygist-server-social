@@ -16,6 +16,9 @@ import Block from "../../models/follow/block.model.js";
 import Ad from "../../models/ads/ad.model.js";
 import User from "../../models/user/user.model.js";
 import HtmlAd from "../../models/ads/htmlAd.model.js";
+import EcommerceInterest from "../../models/ecommarce/ecommerceInterest.model.js";
+import EcomProduct from "../../models/ecommarce/EcomProduct.js";
+import Shop from "../../models/ecommarce/Seller.model.js";
 
 const toOID = (id) => new mongoose.Types.ObjectId(id);
 
@@ -167,6 +170,108 @@ function injectHtmlAds(items, htmlAds, interval = 12) {
   }
   
   //  console.log("result ", result);
+
+  return result;
+}
+
+/* ---------------------- ECOMMERCE INTEREST INJECT ---------------------- */
+
+async function getEcommerceInterestProducts(userId) {
+  if (!userId) return [];
+
+  try {
+    const interests = await EcommerceInterest.find({
+      userId,
+    })
+      .sort({ lastInteractionAt: -1 })
+      .limit(5)
+      .select("productId action lastInteractionAt")
+      .lean();
+
+    if (!interests.length) return [];
+
+    const productIds = interests.map((item) => item.productId);
+
+    const products = await EcomProduct.find({
+      _id: { $in: productIds },
+      status: "active",
+      isDeleted: false,
+      stock: { $gt: 0 },
+    }).lean();
+
+    // Interest-এর latest order maintain করা
+    const productMap = new Map(
+      products.map((product) => [String(product._id), product]),
+    );
+
+    // Shop IDs collect
+    const shopIds = [
+      ...new Set(
+        products
+          .filter((product) => product.shopId)
+          .map((product) => String(product.shopId)),
+      ),
+    ];
+
+    // Shop info একবারে fetch
+    const shops = await Shop.find({
+      _id: { $in: shopIds },
+      isDeleted: { $ne: true },
+    }).lean();
+
+    // Shop map
+    const shopMap = new Map(shops.map((shop) => [String(shop._id), shop]));
+
+    return interests
+      .map((interest) => {
+        const product = productMap.get(String(interest.productId));
+
+        if (!product) return null;
+        const shop = product.shopId
+          ? shopMap.get(String(product.shopId))
+          : null;
+
+        return {
+          feedType: "ecommerce",
+          data: {
+            ...product,
+            shop: shop || null,
+            interestAction: interest.action,
+            interestAt: interest.lastInteractionAt,
+          },
+        };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.error("❌ Ecommerce interest products error:", error);
+    return [];
+  }
+}
+function injectEcommerceProducts(items, ecommerceProducts, interval = 15) {
+  if (!ecommerceProducts?.length || items.length < interval) {
+    return items;
+  }
+
+  const result = [];
+
+  let ecommerceIndex = 0;
+  let postCount = 0;
+
+  for (const item of items) {
+    result.push(item);
+
+    if (item.feedType === "post" || item.feedType === "groupPost") {
+      postCount++;
+    }
+
+    if (postCount === interval) {
+      result.push(ecommerceProducts[ecommerceIndex]);
+
+      ecommerceIndex = (ecommerceIndex + 1) % ecommerceProducts.length;
+
+      postCount = 0;
+    }
+  }
 
   return result;
 }
@@ -420,6 +525,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
   });
 
   const sliced = mixed.slice(0, take);
+  const ecommerceProducts = await getEcommerceInterestProducts(userId);
 
   /* ---------------------- LIKE/SHARE ---------------------- */
   if (userId && sliced.length > 0) {
@@ -613,6 +719,8 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
   let finalItems = injectAds(items, filteredAds, 5);
 
   finalItems = injectHtmlAds(finalItems, htmlAds, 12);
+
+  finalItems = injectEcommerceProducts(finalItems, ecommerceProducts, 15);
  
 
   // 🔥 cursor ONLY from basePosts
@@ -624,7 +732,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
         _id: last._id,
       }
     : null;
-  // console.log('final items',finalItems);
+  
 
   // console.log('final items',finalItems);
   

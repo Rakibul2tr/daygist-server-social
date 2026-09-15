@@ -12,15 +12,16 @@ import {
   getMySellerOrderDetails,
   updateMySellerOrderStatus,
 } from "../../controllers/ecommerce/seller.controller.js";
+import { isSellerOrShopModerator } from "../../middleware/isSellerModerator.js";
 
 const router = Router();
 
 /* ===== seller ===== */
 router.post("/seller/request", authGuard, requestSeller);
-router.get("/seller/me", authGuard, getMySellerInfo);
-router.get("/seller/orders", authGuard, getMySellerOrders);
-router.get("/seller/orders/:id", authGuard, getMySellerOrderDetails);
-router.patch("/seller/orders/:id/status", authGuard, updateMySellerOrderStatus);
+router.get("/seller/me", authGuard,isSellerOrShopModerator, getMySellerInfo);
+router.get("/seller/orders", authGuard,isSellerOrShopModerator, getMySellerOrders);
+router.get("/seller/orders/:id", authGuard,isSellerOrShopModerator, getMySellerOrderDetails);
+router.patch("/seller/orders/:id/status", authGuard,isSellerOrShopModerator, updateMySellerOrderStatus);
 
 /* ===== ADMIN ===== */
 router.get(

@@ -6,6 +6,7 @@ import {
   adminMonetizationStatus,
   getSingleMonetization,
 } from "../../controllers/admin/adminMonetiz.controller.js";
+import { isAdminOrModerator } from "../../middleware/isAdminMiddleware.js";
 
 const router = express.Router();
 
