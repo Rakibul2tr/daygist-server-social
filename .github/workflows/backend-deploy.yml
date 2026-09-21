@@ -1,0 +1,33 @@
+name: Deploy Backend to VPS
+
+on:
+  push:
+    branches:
+      - main  # আপনার মেইন ব্রাঞ্চের নাম master হলে এখানে master লিখবেন
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy & Restart via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          script: |
+            cd /root/backend/daygist-server-social
+            
+            # গিট ক্রেডিশনাল ক্যাশ থেকে পাসওয়ার্ডের ঝামেলা এড়াতে সরাসরি রিপোজিটরি আপডেট
+            git fetch --all
+            git reset --hard origin/main
+            
+            # প্যাকেজ আপডেট ও অ্যাপ রিস্টার্ট
+            npm install --production
+            pm2 start src/server.js --name "daygist-server-social"
+            pm2 save

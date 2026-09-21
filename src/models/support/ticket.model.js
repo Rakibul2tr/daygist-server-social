@@ -17,9 +17,14 @@ const TicketSchema = new mongoose.Schema(
         "other",
       ],
     },
+    assignedModerator: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     userType: {
       type: String,
-      enum: ["default", "monetization", "seller", "other"],
+      enum: ["default", "monetization", "seller", "adviser"],
       required: true,
       default: "default",
     },
@@ -34,19 +39,22 @@ const TicketSchema = new mongoose.Schema(
     ],
     status: {
       type: String,
-      enum: ["open", "in_progress", "resolved", "closed"],
+      enum: ["open", "pending", "resolved", "closed", "answered"],
       default: "open",
     },
     // অ্যাডমিন যখন এই টিকিটের রিপ্লাই দেবে, তখন মেসেজ এবং টাইম এখানে স্টোর হবে
-    adminReply: {
-      message: { type: String, default: null },
-      repliedAt: { type: Date, default: null },
-      repliedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        default: null,
+    replies: [
+      {
+        senderId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        senderRole: { type: String, required: true }, // "USER", "ADMIN", "MODERATOR"
+        text: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
       },
-    },
+    ],
   },
   { timestamps: true },
 );
