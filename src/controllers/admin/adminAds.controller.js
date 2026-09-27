@@ -416,18 +416,18 @@ export const deleteAd = async (req, res) => {
     }
 
     // ওনারশিপ চেক (অ্যাডমিন ছাড়া অন্য ইউজার নিজের অ্যাড ছাড়া ডিলিট করতে পারবে না)
-    if (String(ad.advertiserId) !== String(userId) && userRole !== "admin") {
+    if (String(ad.advertiserId) !== String(userId) && userRole !== "ADMIN") {
       return res.status(403).json({ success: false, message: "Unauthorized to delete this campaign" });
     }
 
     // 🌟 ৫০% রিফান্ড পলিসি (যদি বাকি বাজেট থাকে এবং ইউজার নিজে ওনার হয়ে রিমুভ করে)
-    if (ad.remaining_budget > 0 && userRole !== "admin") {
+    if (ad.remaining_budget > 0 && userRole !== "ADMIN") {
       const refundableCoins = ad.remaining_budget * 0.5; // ৫০% ফেরতযোগ্য কয়েন
-      const refundUsdAmount = refundableCoins / 100000;  // ডলারে কনভার্ট (1 USD = 100,000 Coins)
+      const refundUsdAmount = refundableCoins / 100000; // ডলারে কনভার্ট (1 USD = 100,000 Coins)
 
       // প্রোভাইডারের ওয়ালেটে ব্যালেন্স প্লাস করা
       await User.findByIdAndUpdate(ad.advertiserId, {
-        $inc: { balance: refundUsdAmount }
+        $inc: { balance: refundUsdAmount },
       });
 
       // রিফান্ড ট্রানজেকশন হিস্ট্রি রেকর্ড তৈরি করা
@@ -436,7 +436,7 @@ export const deleteAd = async (req, res) => {
         type: "own",
         amount: refundUsdAmount,
         reference: `50% Refunded (Deleted Campaign): ${ad.title?.slice(0, 20)}`,
-        status: "completed"
+        status: "completed",
       });
     }
 

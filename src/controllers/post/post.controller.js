@@ -120,10 +120,42 @@ export const createPost = async (req, res) => {
       const diff = now - lastTime;
 
       if (diff < FIVE_MINUTES) {
+
+        const keysToDelete = [];
+        const { type, images, video, medias } = req.body || {};
+
+        // ক) টাইপ যদি ইমেজ হয়, তবে সব ইমেজের 'key' সংগ্রহ করা হবে
+        if (type === "image" && Array.isArray(images) && images.length > 0) {
+          images.forEach((img) => {
+            if (img?.key) keysToDelete.push(img.key);
+          });
+        }
+        // খ) টাইপ যদি ভিডিও হয়, তবে ভিডিওর 'key' সংগ্রহ করা হবে
+        else if (type === "video" && video?.key) {
+          keysToDelete.push(video.key);
+        }
+        // গ) আপনার ওল্ড বা লেগেসি 'medias' ফিল্ড থাকলে তার সেফটি ব্যাকআপ
+        else if (Array.isArray(medias) && medias.length > 0) {
+          medias.forEach((m) => {
+            if (m?.key) keysToDelete.push(m.key);
+          });
+        }
+
+        // 🚀 যদি কোনো ভ্যালিড key পাওয়া যায়, তবেই কেবল ওয়াসাতি ডিলিট কল হবে
+        if (keysToDelete.length > 0) {
+          
+          // ফায়ার অ্যান্ড ফরগেট (Fire & Forget) স্টাইলে ব্যাকগ্রাউন্ডে ডিলিট হবে,
+          // যেন ইউজারের এরর রেসপন্স পেতে দেরি না হয়
+         await deleteManyFromWasabi(keysToDelete).catch((err) => {
+            console.log("❌ Wasabi garbage cleaning failed:", err.message);
+          });
+        }
+
         const remaining = Math.ceil((FIVE_MINUTES - diff) / 1000);
         const minutes = Math.floor(remaining / 60);
         const seconds = remaining % 60;
 
+        
 
         return res.status(400).json({
           success: false,

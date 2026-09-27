@@ -625,9 +625,11 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
     .sort({ createdAt: -1 })
     .populate("advertiserId", "name email avatar ") // ➔ প্রোভাইডার ডাটা যুক্ত হলো
     .lean();
-    // console.log("ads", ads);
+    
 
     let filteredAds = [...ads];
+
+    
 
     const htmlAds = await HtmlAd.find({
       isActive: true,
@@ -648,13 +650,15 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
           return false;
         }
 
+        
+        
         // ---------- Gender ----------
         if (
           Array.isArray(ad.gender) &&
           ad.gender.length &&
           !ad.gender.includes(me.gender)
         ) {
-          return false;
+          return true;
         }
 
         // ---------- Age ----------
@@ -678,7 +682,7 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
       });
     }
 
- 
+//  console.log("filteredAds", filteredAds.length);
   
   if (userId && filteredAds.length > 0) {
     const adIds = filteredAds.map((a) => a._id);
@@ -721,6 +725,10 @@ export async function getHomeFeed({ userId, limit = 20, cursor }) {
   finalItems = injectHtmlAds(finalItems, htmlAds, 12);
 
   finalItems = injectEcommerceProducts(finalItems, ecommerceProducts, 15);
+
+
+  // console.log("finalItem", filteredAds);
+  
  
 
   // 🔥 cursor ONLY from basePosts
