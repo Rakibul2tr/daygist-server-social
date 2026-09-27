@@ -136,24 +136,24 @@ async function start() {
        console.log("🚀 Server running on:", PORT);
      });
 
-    // const data = countries.map((country) => ({
-    //   code: country.code.toUpperCase(),
-    //   name: country.name,
-    //   flag: country.flag || "",
-    //   cpc: {
-    //     daygist: 0,
-    //     others: 0,
-    //   },
-    //   isActive: true,
-    // }));
+    const data = countries.map((country) => ({
+      code: country.code.toUpperCase(),
+      name: country.name,
+      flag: country.flag || "",
+      cpc: {
+        daygist: 0,
+        others: 0,
+      },
+      isActive: true,
+    }));
 
-    // await CountryCpc.deleteMany({});
+    await CountryCpc.deleteMany({});
 
-    // await CountryCpc.insertMany(data);
+    await CountryCpc.insertMany(data);
 
-    // console.log(`✅ ${data.length} countries inserted successfully`);
+    console.log(`✅ ${data.length} countries inserted successfully`);
 
-    // process.exit(0);
+    process.exit(0);
 
     const shutdown = async () => {
       console.log("🛑 Shutting down...");
