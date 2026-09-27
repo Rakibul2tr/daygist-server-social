@@ -151,7 +151,8 @@ async function start() {
 
     await CountryCpc.insertMany(data);
 
-    console.log(`✅ ${data.length} countries inserted successfully`);
+
+    console.log(`✅ ${data.length} countries inserted successfully data`);
 
     process.exit(0);
 
