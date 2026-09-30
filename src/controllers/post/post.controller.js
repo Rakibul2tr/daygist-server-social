@@ -36,7 +36,7 @@ export const checkRePostTime = async (req, res) => {
       .lean();
 
     if (lastPost && lastPost.createdAt) {
-      const now = new Date().getTime();
+      const now = new Date();
       const lastTime = new Date(lastPost.createdAt).getTime();
       const diff = now - lastTime;
 
