@@ -18,6 +18,55 @@ const isOwner = (post, userId) => String(post.author) === String(userId);
 const toStr = (v) => (typeof v === "string" ? v.trim() : "");
 const isValidUrl = (u) => typeof u === "string" && u.startsWith("http");
 
+export const checkRePostTime = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const FIVE_MINUTES = 5 * 60 * 1000; // ৫ মিনিট = ৩০০,০০০ মিলিমেকেন্ড
+
+    // 🔍 ইউজারের লেটেস্ট করা পোস্টটির তৈরি হওয়ার সময় খুঁজে বের করা
+    const lastPost = await Post.findOne({
+      author: new mongoose.Types.ObjectId(String(userId)),
+    })
+      .sort({ createdAt: -1 })
+      .select("createdAt")
+      .lean();
+
+    if (lastPost && lastPost.createdAt) {
+      const now = Date.now();
+      const lastTime = new Date(lastPost.createdAt).getTime();
+      const diff = now - lastTime;
+
+      // 🛑 কন্ডিশন ১: যদি ৫ মিনিট পার না হয়ে থাকে (স্প্যাম প্রোটেকশন লক)
+      if (diff < FIVE_MINUTES) {
+        const remaining = Math.ceil((FIVE_MINUTES - diff) / 1000);
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+
+        return res.status(400).json({
+          success: false,
+          isAllowed: false, // ফ্রন্টএন্ড সহজে বুুলিয়ান দিয়ে কন্ডিশন চেক করতে পারবে
+          message: `Please wait ${minutes}m ${seconds}s before your next post.`,
+          remainingSeconds: remaining,
+        });
+      }
+    }
+
+    // 🟢 কন্ডিশন ২: ৫ মিনিট পার হয়ে গেছে অথবা এটি ইউজারের প্রথম পোস্ট (পোস্ট করার অনুমতি দেওয়া হলো)
+    return res.status(200).json({
+      success: true,
+      isAllowed: true,
+      message: "You can create a new post now.",
+    });
+  } catch (error) {
+    console.error("❌ checkRePostTime error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const createPost = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -107,62 +156,33 @@ export const createPost = async (req, res) => {
 
     // ✅ STEP: last post cooldown check (5 minutes)
 
-    const FIVE_MINUTES = 5 * 60 * 1000;
+    // const FIVE_MINUTES = 5 * 60 * 1000;
 
-    const lastPost = await Post.findOne({ author: userId })
-      .sort({ createdAt: -1 })
-      .select("createdAt");
+    // const lastPost = await Post.findOne({ author: userId })
+    //   .sort({ createdAt: -1 })
+    //   .select("createdAt");
 
-    if (lastPost) {
-      const now = Date.now();
-      const lastTime = new Date(lastPost.createdAt).getTime();
+    // if (lastPost) {
+    //   const now = Date.now();
+    //   const lastTime = new Date(lastPost.createdAt).getTime();
 
-      const diff = now - lastTime;
+    //   const diff = now - lastTime;
 
-      if (diff < FIVE_MINUTES) {
+    //   if (diff < FIVE_MINUTES) {
 
-        const keysToDelete = [];
-        const { type, images, video, medias } = req.body || {};
 
-        // ক) টাইপ যদি ইমেজ হয়, তবে সব ইমেজের 'key' সংগ্রহ করা হবে
-        if (type === "image" && Array.isArray(images) && images.length > 0) {
-          images.forEach((img) => {
-            if (img?.key) keysToDelete.push(img.key);
-          });
-        }
-        // খ) টাইপ যদি ভিডিও হয়, তবে ভিডিওর 'key' সংগ্রহ করা হবে
-        else if (type === "video" && video?.key) {
-          keysToDelete.push(video.key);
-        }
-        // গ) আপনার ওল্ড বা লেগেসি 'medias' ফিল্ড থাকলে তার সেফটি ব্যাকআপ
-        else if (Array.isArray(medias) && medias.length > 0) {
-          medias.forEach((m) => {
-            if (m?.key) keysToDelete.push(m.key);
-          });
-        }
-
-        // 🚀 যদি কোনো ভ্যালিড key পাওয়া যায়, তবেই কেবল ওয়াসাতি ডিলিট কল হবে
-        if (keysToDelete.length > 0) {
-          
-          // ফায়ার অ্যান্ড ফরগেট (Fire & Forget) স্টাইলে ব্যাকগ্রাউন্ডে ডিলিট হবে,
-          // যেন ইউজারের এরর রেসপন্স পেতে দেরি না হয়
-         await deleteManyFromWasabi(keysToDelete).catch((err) => {
-            console.log("❌ Wasabi garbage cleaning failed:", err.message);
-          });
-        }
-
-        const remaining = Math.ceil((FIVE_MINUTES - diff) / 1000);
-        const minutes = Math.floor(remaining / 60);
-        const seconds = remaining % 60;
+    //     const remaining = Math.ceil((FIVE_MINUTES - diff) / 1000);
+    //     const minutes = Math.floor(remaining / 60);
+    //     const seconds = remaining % 60;
 
         
 
-        return res.status(400).json({
-          success: false,
-          message: `Wait ${minutes}m ${seconds}s before next post`,
-        });
-      }
-    }
+    //     return res.status(400).json({
+    //       success: false,
+    //       message: `Wait ${minutes}m ${seconds}s before next post`,
+    //     });
+    //   }
+    // }
 
     const safePrivacy = ["public", "followers", "only_me"].includes(privacy)
       ? privacy
