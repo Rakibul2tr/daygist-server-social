@@ -36,11 +36,11 @@ export const checkRePostTime = async (req, res) => {
       .lean();
 
     if (lastPost && lastPost.createdAt) {
-      const now = new Date();
+      const now = new Date().getTime();
       const lastTime = new Date(lastPost.createdAt).getTime();
       const diff = now - lastTime;
 
-      // 🛑 কন্ডিশন ১: যদি ৫ মিনিট পার না হয়ে থাকে (স্প্যাম প্রোটেকশন লক)
+     
       if (diff < FIVE_MINUTES) {
         const remaining = Math.ceil((FIVE_MINUTES - diff) / 1000);
         const minutes = Math.floor(remaining / 60);
