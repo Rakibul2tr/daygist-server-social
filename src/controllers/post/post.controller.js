@@ -27,7 +27,7 @@ export const checkRePostTime = async (req, res) => {
 
     const FIVE_MINUTES = 5 * 60 * 1000; // ৫ মিনিট = ৩০০,০০০ মিলিমেকেন্ড
 
-    // 🔍 ইউজারের লেটেস্ট করা পোস্টটির তৈরি হওয়ার সময় খুঁজে বের করা
+  
     const lastPost = await Post.findOne({
       author: new mongoose.Types.ObjectId(String(userId)),
     })
@@ -55,7 +55,6 @@ export const checkRePostTime = async (req, res) => {
       }
     }
 
-    // 🟢 কন্ডিশন ২: ৫ মিনিট পার হয়ে গেছে অথবা এটি ইউজারের প্রথম পোস্ট (পোস্ট করার অনুমতি দেওয়া হলো)
     return res.status(200).json({
       success: true,
       isAllowed: true,
