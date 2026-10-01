@@ -21,7 +21,7 @@ const router = Router();
 router.get("/feed", authGuard, getFeed);
 
 // post CRUD
-router.get("/check-repost-time", authGuard, checkRePostTime);
+router.post("/check-repost-time", authGuard, checkRePostTime);
 router.post("/create", authGuard, createPost);
 router.patch("/:id", authGuard, updatePost);
 router.delete("/:id/delete", authGuard, deletePost);
