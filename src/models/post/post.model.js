@@ -114,6 +114,7 @@ const postSchema = new mongoose.Schema(
     backgroundUrl: { type: String, default: null },
     feeling: { type: String, default: null },
     textStyle: { type: textStyleSchema, default: null },
+    country: { type: String, default: null },// for safe and return post
 
     // ✅ media posts
     medias: { type: [mediaSchema], default: [] },

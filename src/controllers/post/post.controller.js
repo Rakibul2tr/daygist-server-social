@@ -103,6 +103,7 @@ export const createPost = async (req, res) => {
       postType,
       isRePost,
       sharedPostId,
+      country, // for safe and return post
     } = req.body || {};
 
     const postContentType = ["text", "image", "video"].includes(type)
@@ -153,35 +154,7 @@ export const createPost = async (req, res) => {
       });
     }
 
-    // ✅ STEP: last post cooldown check (5 minutes)
-
-    // const FIVE_MINUTES = 5 * 60 * 1000;
-
-    // const lastPost = await Post.findOne({ author: userId })
-    //   .sort({ createdAt: -1 })
-    //   .select("createdAt");
-
-    // if (lastPost) {
-    //   const now = Date.now();
-    //   const lastTime = new Date(lastPost.createdAt).getTime();
-
-    //   const diff = now - lastTime;
-
-    //   if (diff < FIVE_MINUTES) {
-
-
-    //     const remaining = Math.ceil((FIVE_MINUTES - diff) / 1000);
-    //     const minutes = Math.floor(remaining / 60);
-    //     const seconds = remaining % 60;
-
-        
-
-    //     return res.status(400).json({
-    //       success: false,
-    //       message: `Wait ${minutes}m ${seconds}s before next post`,
-    //     });
-    //   }
-    // }
+  
 
     const safePrivacy = ["public", "followers", "only_me"].includes(privacy)
       ? privacy
@@ -386,6 +359,7 @@ export const createPost = async (req, res) => {
       postType: postType ? postType : "post",
       isRePost: isPostShared,
       sharedPostId: isPostShared ? sharedPostId : null,
+      country: country ? country : null, // for safe and return post
     });
 
     const populated = await Post.findById(doc._id)
